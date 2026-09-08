@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<!-- Overhead (bird's-eye) camera for the waiter scene. Static model high above the
+     room centre looking straight down. gzserver renders it offscreen; the frame
+     grabber streams it to the browser as a top-down view of the whole bar. -->
+<sdf version="1.6">
+  <model name="overhead_cam">
+    <static>true</static>
+    <!-- x y z roll pitch yaw : centre of the room, 16 m up, pitch 90 deg = straight down -->
+    <pose>1.0 2.0 16.0 0 1.5708 1.5708</pose>
+    <link name="link">
+      <sensor name="overhead_camera" type="camera">
+        <always_on>1</always_on>
+        <update_rate>10.0</update_rate>
+        <visualize>false</visualize>
+        <camera>
+          <horizontal_fov>1.4</horizontal_fov>
+          <image>
+            <width>800</width>
+            <height>600</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.1</near>
+            <far>100</far>
+          </clip>
+        </camera>
+        <plugin name="overhead_cam_plugin" filename="libgazebo_ros_camera.so">
+          <ros>
+            <namespace>overhead_camera</namespace>
+          </ros>
+          <camera_name>overhead</camera_name>
+          <frame_name>overhead_link</frame_name>
+        </plugin>
+      </sensor>
+    </link>
+  </model>
+</sdf>

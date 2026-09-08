@@ -1,0 +1,42 @@
+# ── Runtime output of a simulation run ────────────────────────────────────
+# Written by the frame grabbers and the bridge on every run; stale the moment
+# the simulation restarts.
+robot_frame.jpg
+overhead_frame.jpg
+robot_depth.png
+camera_info.json
+robot_pose.json
+*.tmp
+*.jpg.tmp
+
+# The host <-> container mailbox plus the robot's own customer memory.
+hri_project_ffa/shared/*
+!hri_project_ffa/shared/.gitkeep
+
+# Experiment snapshots, produced by whoever runs the study
+hri_project_ffa/runs/
+
+# ── Build artifacts ───────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+install/
+log/
+
+# ── Logs ──────────────────────────────────────────────────────────────────
+*.log
+
+# ── Secrets ───────────────────────────────────────────────────────────────
+# The Gemini key belongs in the shell profile, never in the repository.
+.env
+.env.*
+*.key
+*.pem
+
+# ── OS noise ──────────────────────────────────────────────────────────────
+.DS_Store
+._*
+__MACOSX/
+Thumbs.db

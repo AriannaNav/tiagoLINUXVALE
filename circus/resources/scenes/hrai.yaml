@@ -1,0 +1,50 @@
+simulation_config: hrai
+teams:
+  red:
+    - type: Booster-T1
+      number: 1
+      position: [0.0, -1.5, 0.68]
+      orientation: [0.0, 0.0, 0.0]
+
+# Objects in the scene.
+# type: box | sphere | cylinder | mesh
+# For mesh objects run: python3 circus/resources/meshes/objects/download_objects.py
+objects:
+  # Real dining table mesh (from Gazebo Fuel / OpenRobotics)
+  # Download with: python3 circus/resources/meshes/objects/download_objects.py
+  - name: table
+    type: mesh
+    mesh: table
+    position: [0.0, 0.8, 0.0]
+    scale: 1.0
+    fixed: true
+
+  # Objects on the table surface
+  # Dining Table top is ~74cm tall → place objects at z ≈ 0.74
+  - name: mug
+    type: mesh
+    mesh: mug
+    position: [-0.15, 0.75, 0.74]
+    scale: 1.0
+    fixed: false
+
+  - name: bowl
+    type: mesh
+    mesh: bowl
+    position: [0.10, 0.85, 0.74]
+    scale: 1.0
+    fixed: false
+
+  - name: teapot
+    type: mesh
+    mesh: teapot
+    position: [0.0, 0.65, 0.74]
+    scale: 1.0
+    fixed: false
+
+  - name: plate
+    type: mesh
+    mesh: plate
+    position: [-0.05, 1.0, 0.74]
+    scale: 1.0
+    fixed: false

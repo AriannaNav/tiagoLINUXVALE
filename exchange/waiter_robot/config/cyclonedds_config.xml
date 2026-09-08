@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  CycloneDDS configuration for waiter_robot.
+
+  MaxMessageSize / FragmentSize fix play_motion2 receiving motion_name=''
+  (default per-sample allocation is ~19 bytes for unbounded strings; actual
+  payload is ~32 bytes).
+
+  These settings live under Internal in the version of CycloneDDS shipped
+  with ROS2 Humble. Newer versions print "setting moved to General" warnings
+  but still apply the values — the warnings are harmless.
+
+  MinimumSocketReceiveBufferSize rimosso: su Docker-Desktop/Mac il kernel
+  rmem_max non è alzabile dal container (sysctl di rete non scrivibile), e
+  richiederlo faceva fallire l'init CycloneDDS ("rmw handle is invalid") -> Gazebo
+  e bridge non partivano. Con la frammentazione a 4000B i messaggi grandi passano
+  comunque col buffer di default. I fix MaxMessageSize/FragmentSize per
+  play_motion2 restano.
+-->
+<CycloneDDS>
+  <Domain>
+    <Internal>
+      <MaxMessageSize>65500B</MaxMessageSize>
+      <FragmentSize>4000B</FragmentSize>
+    </Internal>
+  </Domain>
+</CycloneDDS>

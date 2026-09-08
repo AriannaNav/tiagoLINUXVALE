@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="wood_floor"><static>true</static>
+    <link name="l">
+      <visual name="floor">
+        <geometry><box><size>13.6 16.0 0.02</size></box></geometry>
+        <material>
+          <script>
+            <uri>model://wood_floor/materials/scripts</uri>
+            <uri>model://wood_floor/materials/textures</uri>
+            <name>WoodFloor</name>
+          </script>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

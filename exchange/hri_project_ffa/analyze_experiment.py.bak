@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+"""Experimental evaluation: priority reordering ON vs OFF.
+
+Aggregates per-run metrics from shared/events.json and runs the statistical test
+comparing the two conditions, plus the Godspeed and RoSAS questionnaire scores if
+any were collected.
+
+Procedure:
+  1. run the scenario N>=5 times per condition (control: WAITER_PRIORITY_REORDER=0),
+     copying shared/events.json to runs/reorder_{on,off}_runN.json after each run;
+  2. fill godspeed_questionnaire.html once per run, appending each result line to
+     runs/godspeed_results.jsonl;
+  3. python3 analyze_experiment.py "runs/reorder_on_*.json" --vs "runs/reorder_off_*.json"
+
+H1: reordering lowers the urgent customer's wait time and raises Likeability and
+Perceived Intelligence."""
+import argparse
+import glob
+import json
+import re
+import statistics
+
+try:
+    from scipy import stats
+except ImportError:
+    stats = None
+
+ORDER_RE = re.compile(r"serving order: (.+?) \(priority_reorder=(on|off)\)")
+ORDER_TABLE_RE = re.compile(r"([\w ]+?) \((high|medium|low)\)")
+ORDER_TAKEN_RE = re.compile(r"^order at (.+?): ")
+SERVE_START_RE = re.compile(r"^Now serving (.+?) to (.+?)\.$")
+SERVE_DONE_RE = re.compile(r"^(.+?) → (.+?): (served|not served)$")
+
+def load_events(path):
+    with open(path) as f:
+        return json.load(f).get("events", [])
+
+def extract_metrics(events):
+    """One run's objective metrics: urgent-table wait time (order-taken ->
+    served), mean wait time across all tables, serve success rate, and
+    whether priority reorder was active this run."""
+    order_taken, served_at = {}, {}
+    urgent_table, reorder_on = None, None
+
+    for e in events:
+        text, ts = e.get("text", ""), e.get("ts")
+        m = ORDER_RE.search(text)
+        if m:
+            reorder_on = (m.group(2) == "on")
+            for name, urgency in ORDER_TABLE_RE.findall(m.group(1)):
+                if urgency == "high":
+                    urgent_table = name.strip()
+            continue
+        m = ORDER_TAKEN_RE.search(text)
+        if m:
+            order_taken.setdefault(m.group(1).strip(), ts)
+            continue
+        m = SERVE_DONE_RE.match(text)
+        if m and e.get("icon") in ("✅", "⚠️") and m.group(3) == "served":
+            served_at[m.group(2).strip()] = ts
+
+    wait_times = {t: served_at[t] - t0 for t, t0 in order_taken.items()
+                 if t in served_at and served_at[t] >= t0}
+    n_serve_events = sum(1 for e in events if e.get("icon") in ("✅", "⚠️"))
+    n_served_ok = sum(1 for e in events if e.get("icon") == "✅")
+
+    return {
+        "reorder_on": reorder_on,
+        "urgent_table": urgent_table,
+        "urgent_wait": wait_times.get(urgent_table) if urgent_table else None,
+        "mean_wait": statistics.mean(wait_times.values()) if wait_times else None,
+        "serve_success_rate": (n_served_ok / n_serve_events) if n_serve_events else None,
+    }
+
+def load_questionnaire(path):
+    """*_results.jsonl (same {participant,condition,scores,ts} schema for both
+    godspeed_questionnaire.html and rosas_questionnaire.html) ->
+    {condition: [{subscale: score}, ...]}"""
+    by_condition = {}
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                by_condition.setdefault(rec["condition"], []).append(rec["scores"])
+    except OSError:
+        pass
+    return by_condition
+
+def run_test(a, b, label):
+    """Paired t-test when both samples are the same size (within-subject: run
+    i in A and run i in B are the same scenario/participant before vs after),
+    else Welch's t-test (does not assume equal variance — the safer default
+    for small/uneven samples, worth citing as the justified choice)."""
+    a = [x for x in a if x is not None]
+    b = [x for x in b if x is not None]
+    if len(a) < 2 or len(b) < 2:
+        print(f"  {label}: not enough data (n_a={len(a)}, n_b={len(b)}) "
+              "— need >=2 runs per condition")
+        return
+    if stats is None:
+        print(f"  {label}: scipy not installed (`pip install scipy`) — "
+              f"raw means: A={statistics.mean(a):.2f}, B={statistics.mean(b):.2f}")
+        return
+    if len(a) == len(b):
+        t, p = stats.ttest_rel(a, b)
+        test_name = "paired-samples t-test (within-subject)"
+    else:
+        t, p = stats.ttest_ind(a, b, equal_var=False)
+        test_name = "Welch's independent-samples t-test (unequal n)"
+    sig = "SIGNIFICANT at α=0.05" if p < 0.05 else "not significant at α=0.05"
+    print(f"  {label}: A={statistics.mean(a):.2f} (n={len(a)}), "
+          f"B={statistics.mean(b):.2f} (n={len(b)}) — {test_name}")
+    print(f"    t={t:.3f}, p={p:.4f} -> {sig}")
+
+def report_questionnaire(path, label):
+    """Load one *_results.jsonl file and run_test() every subscale it
+    contains, comparing the two conditions found inside it. Shared by
+    Godspeed and RoSAS (and any future validated questionnaire dropped in
+    the same {participant,condition,scores,ts} format)."""
+    data = load_questionnaire(path)
+    if not data:
+        print(f"\n(No {label} data found at {path} — fill in the "
+              f"questionnaire after each run and append the printed JSON "
+              f"line there.)")
+        return
+    print()
+    print(f"Subjective metrics ({label} questionnaire)")
+    print("-" * 60)
+    conditions = list(data.keys())
+    if len(conditions) != 2:
+        print(f"  need exactly 2 conditions in {path}, found: {conditions}")
+        return
+    ca, cb = conditions
+    subscales = sorted({k for recs in data.values() for r in recs for k in r})
+    for sub in subscales:
+        run_test([r.get(sub) for r in data[ca]], [r.get(sub) for r in data[cb]], sub)
+
+def main():
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("condition_a", nargs="+",
+                    help="events.json snapshots for condition A (glob ok)")
+    ap.add_argument("--vs", nargs="+", required=True,
+                    help="events.json snapshots for condition B")
+    ap.add_argument("--godspeed", default="runs/godspeed_results.jsonl")
+    ap.add_argument("--rosas", default="runs/rosas_results.jsonl",
+                    help="optional secondary questionnaire (RoSAS)")
+    args = ap.parse_args()
+
+    files_a = sorted({f for pat in args.condition_a for f in glob.glob(pat)}) or args.condition_a
+    files_b = sorted({f for pat in args.vs for f in glob.glob(pat)}) or args.vs
+
+    metrics_a = [extract_metrics(load_events(f)) for f in files_a]
+    metrics_b = [extract_metrics(load_events(f)) for f in files_b]
+
+    print(f"Condition A: {len(files_a)} run(s) — {files_a}")
+    print(f"Condition B: {len(files_b)} run(s) — {files_b}")
+    print()
+    print("Objective metrics (from events.json)")
+    print("-" * 60)
+    run_test([m["urgent_wait"] for m in metrics_a],
+             [m["urgent_wait"] for m in metrics_b],
+             "Time-to-service for the URGENT customer (s)")
+    run_test([m["mean_wait"] for m in metrics_a],
+             [m["mean_wait"] for m in metrics_b],
+             "Mean time-to-service, all tables (s)")
+    run_test([m["serve_success_rate"] for m in metrics_a],
+             [m["serve_success_rate"] for m in metrics_b],
+             "Serve success rate")
+
+    report_questionnaire(args.godspeed, "Godspeed")
+    report_questionnaire(args.rosas, "RoSAS")
+
+if __name__ == "__main__":
+    main()

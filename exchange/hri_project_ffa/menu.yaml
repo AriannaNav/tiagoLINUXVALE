@@ -1,0 +1,90 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# menu.yaml — the bar's menu: the SINGLE SOURCE OF TRUTH for what TIAGo serves.
+#
+# Edit ONLY this file to change the menu — no code changes needed.
+# core/dialogue_agent.py loads this at runtime and:
+#   • builds the LLM system prompt (what the robot can serve) from it,
+#   • builds the name→robot-word map and the synonyms,
+#   • derives the safety flags (adults_only) and the food/drink split.
+#
+# Each item:
+#   name        : how the robot NAMES it to customers (e.g. "Coca-Cola")
+#   serve       : the exact word the robot/bridge uses to FETCH it
+#   category    : "drink" or "food"
+#   adults_only : true if it must NOT be served to minors (age check at reception)
+#   synonyms    : other words a customer might use for it
+#   appearance  : how the item LOOKS in this bar, for the vision model. These are
+#                 plain 3D models and several carry no readable label, so the
+#                 model is told what to look for -- shape, colour, size. It is
+#                 still the model that decides what is actually on the counter;
+#                 nothing here says an item IS present.
+# ─────────────────────────────────────────────────────────────────────────────
+items:
+  - name: Coca-Cola
+    serve: coca cola
+    category: drink
+    synonyms: [coke, cola, coca]
+    appearance: "a red container with the white Coca-Cola script"
+
+  - name: Sprite
+    serve: sprite
+    category: drink
+    synonyms: []
+    appearance: "a white and green container with the Sprite logo, can or bottle"
+
+  - name: water
+    serve: water
+    category: drink
+    synonyms: [still water, tap water]
+    appearance: "a plain pale, transparent or bluish container with no strong branding"
+
+  - name: orange juice
+    serve: juice
+    category: drink
+    synonyms: [juice, orange, oj]
+    appearance: "an orange container, wider and shorter than a Pringles tube"
+
+  - name: wine
+    serve: wine
+    category: drink
+    adults_only: true
+    synonyms: [red wine, white wine, glass of wine, vino]
+    appearance: "a tall dark maroon bottle with a narrow neck and no readable label"
+
+  - name: Pringles
+    serve: pringles
+    category: food
+    synonyms: [chips, crisps]
+    appearance: "a tall rigid cylinder of constant width with a flat lid, taller than it is wide"
+
+# Non-stocked alcohol words: the robot has no code-level check for these
+# (age/alcohol handling is entirely the LLM's own call — see the WINE/ALCOHOL
+# section of core/dialogue_agent.py's SYSTEM prompt), but they're listed here
+# for reference/future menu additions. Not currently read by any code.
+generic_alcohol_words:
+  - alcohol
+  - alcoholic
+  - booze
+  - beer
+  - lager
+  - cider
+  - champagne
+  - prosecco
+  - cocktail
+  - whisk(?:e)?y
+  - vodka
+  - gin
+  - rum
+  - tequila
+  - mojito
+  - margarita
+  - martini
+  - brandy
+  - sangria
+  - liqueur
+  - aperitif
+  - spritz
+  - negroni
+  - liquor
+  - aperol
+  - birra

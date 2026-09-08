@@ -1,0 +1,10 @@
+# lodge_sofa — due poltrone rosse (Black Lodge). Albedo -> map_Kd.
+newmtl two_chairs_mat
+Ka 0.30 0.30 0.30
+Kd 1 1 1
+Ks 0.15 0.15 0.15
+Ke 0 0 0
+d 1
+Ns 8
+illum 2
+map_Kd two_chairs_mat_Base_Color.png

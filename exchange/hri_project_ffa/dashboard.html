@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TIAGo Waiter — Memory & Scene Graph (live)</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c2230; --line:#2b3444;
+    --txt:#e6edf3; --dim:#8b98a9; --accent:#4aa3ff; --ok:#3fb950; --warn:#d29922;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,sans-serif;
+       background:var(--bg);color:var(--txt);}
+  header{padding:12px 18px;background:var(--panel);border-bottom:1px solid var(--line);
+         display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  .pill{font-size:12px;padding:3px 10px;border-radius:20px;background:var(--panel2);
+        border:1px solid var(--line);color:var(--dim)}
+  .pill b{color:var(--txt)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);
+       margin-right:6px;vertical-align:middle;animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  main{display:grid;grid-template-columns:1.25fr 1fr;
+       grid-template-rows:auto minmax(230px,auto);align-items:start;
+       gap:14px;padding:14px;min-height:calc(100vh - 52px)}
+  .bottom{grid-column:1 / -1;display:grid;grid-template-columns:1.4fr 1fr .9fr;
+          gap:14px}
+  @media (max-width:1200px){
+    main{grid-template-columns:1fr;grid-template-rows:auto}
+    .bottom{grid-template-columns:1fr}
+  }
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+        display:flex;flex-direction:column;overflow:hidden}
+  .card h2{font-size:13px;margin:0;padding:10px 14px;border-bottom:1px solid var(--line);
+           color:var(--dim);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+  .card .body{padding:12px 14px;overflow:auto}
+  #mapCard .body{padding:0;flex:1;min-height:560px}
+  #graphCard .body{padding:0;flex:1;min-height:360px}
+  .left{display:grid;grid-template-rows:auto auto;gap:14px;align-content:start}
+  svg{width:100%;height:100%;display:block}
+  .right{display:grid;grid-template-rows:auto auto auto;gap:14px;align-content:start}
+  .right>.card>.body{min-height:96px}
+  .scoreRow{display:flex;align-items:center;gap:8px;font-size:12px;margin:4px 0}
+  .scoreRow .lbl{width:88px;color:var(--dim)}
+  .scoreRow .val{width:36px;text-align:right;font-weight:600}
+  .bar{flex:1;height:8px;background:var(--panel2);border-radius:6px;overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:6px}
+  .verdict{display:inline-block;border-radius:6px;padding:2px 10px;font-size:12px;
+           font-weight:700;margin-left:8px}
+  .sub{display:grid;grid-template-rows:auto auto auto;gap:14px;align-content:start}
+  .sub>.card>.body{min-height:104px;max-height:440px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--dim);font-weight:600;font-size:11px;text-transform:uppercase}
+  .chip{display:inline-block;background:var(--panel2);border:1px solid var(--line);
+        border-radius:20px;padding:1px 9px;margin:2px 3px 0 0;font-size:12px}
+  .usual{background:#20303f;border-color:#2f5170;color:#9fd0ff}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--dim);
+          padding:8px 14px;border-top:1px solid var(--line)}
+  .insights{padding:8px 14px;border-top:1px solid var(--line);font-size:12px;
+            color:var(--dim)}
+  .insights .tag{display:inline-block;background:var(--panel2);border:1px solid var(--line);
+            border-radius:20px;padding:2px 10px;margin:2px 4px 2px 0;color:var(--txt)}
+  .insights .tag i{font-style:normal;color:var(--accent)}
+  /* Age flag on a person. The bar refuses alcohol to minors, so whether a
+     customer is one is safety-relevant information, not decoration: it is
+     shown wherever that person is named. */
+  .minor{display:inline-block;margin-left:5px;padding:0 5px;border-radius:7px;
+         background:#5a3a10;border:1px solid #a9762a;color:#ffc978;
+         font-size:10px;font-weight:700;letter-spacing:.3px;vertical-align:1px}
+  .legend span{display:inline-flex;align-items:center;gap:5px}
+  .sw{width:11px;height:11px;border-radius:50%;display:inline-block}
+  .nodeRow{font-size:12px;padding:3px 0;border-bottom:1px solid var(--line);color:var(--dim)}
+  .nodeRow b{color:var(--txt)}
+  .new{animation:flash 1.6s ease-out}
+  @keyframes flash{0%{background:#294b6b}100%{background:transparent}}
+  .muted{color:var(--dim);font-size:12px}
+  .stat{font-size:22px;font-weight:700}
+  #resetBtn{margin-left:auto;background:#3a1f24;color:#ff9aa2;border:1px solid #5c2b33;
+            border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer}
+  #resetBtn:hover{background:#4a252c}
+  /* mission step tracker (header) */
+  .steps{display:flex;gap:4px;align-items:center;font-size:11px}
+  .steps .st{padding:3px 9px;border-radius:14px;background:var(--panel2);
+             border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+  .steps .st.on{background:#173350;border-color:#2f5170;color:#9fd0ff;font-weight:700}
+  .steps .sep{color:var(--line)}
+  /* hazard banner over the map */
+  #hazardBanner{display:none;padding:8px 14px;background:#3a1f24;color:#ff9aa2;
+                border-bottom:1px solid #5c2b33;font-size:13px;font-weight:600;
+                animation:pulse 1.2s infinite}
+  /* event timeline */
+  #timeline{font-size:12px}
+  #timeline .ev{display:flex;gap:8px;padding:3px 0;border-bottom:1px solid var(--line)}
+  #timeline .ev .t{color:var(--dim);white-space:nowrap;font-variant-numeric:tabular-nums}
+  /* KG reasoning chain */
+  #reasonBox .rnode{display:inline-block;background:#173350;border:1px solid #2f5170;
+      color:#9fd0ff;border-radius:8px;padding:3px 9px;font-size:12px;margin:3px 0}
+  #reasonBox .rrel{display:inline-block;color:var(--warn);font-size:11px;margin:0 5px}
+  /* counter stock shelf */
+  #stockBox .drink{display:inline-flex;flex-direction:column;align-items:center;
+      gap:4px;margin:6px 10px 0 0;font-size:11px;color:var(--txt)}
+  #stockBox .bot{width:22px;height:38px;border-radius:6px 6px 4px 4px;
+      border:2px solid #0e1116;position:relative}
+  #stockBox .bot::before{content:"";position:absolute;top:-9px;left:6px;width:6px;
+      height:9px;background:inherit;border:2px solid #0e1116;border-radius:3px 3px 0 0}
+  #stockBox .veto{opacity:.45}
+  #stockBox .tagv{font-size:10px;color:var(--warn)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🤖 TIAGo Waiter — <span style="color:var(--accent)">Memory & Scene Graph</span></h1>
+  <span class="pill"><span class="dot"></span>live <b id="clock">—</b></span>
+  <span class="pill">robot state: <b id="robotState">—</b></span>
+  <span class="steps" id="steps"></span>
+  <span class="pill">graph nodes: <b id="nodeCount">0</b></span>
+  <span class="pill">customers in memory: <b id="custCount">0</b></span>
+  <button id="resetBtn" title="Clear all customer memory (visits + past orders)">Reset memory</button>
+</header>
+
+<main>
+  <div class="left">
+  <div class="card" id="mapCard">
+    <h2>Scene graph — built in real time (top-down view)</h2>
+    <div id="hazardBanner">⚠️ spilled drink — the floor is wet and slippery, serving paused</div>
+    <div class="body"><svg id="map" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet"></svg></div>
+    <div class="insights" id="insights"></div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="card" id="graphCard">
+    <h2>🕸️ Scene graph — nodes and relations</h2>
+    <div class="body"><svg id="graphSvg" viewBox="0 0 900 420"
+         preserveAspectRatio="xMidYMid meet"></svg></div>
+  </div>
+  </div>
+
+  <div class="right">
+    <div class="card">
+      <h2>🧭 Self-awareness — last decision (P · C · Pr → Ft)</h2>
+      <div class="body" id="awareBox"><div class="muted">no decision yet</div></div>
+    </div>
+    <div class="card">
+      <h2>🧠 Robot memory (customers & orders)</h2>
+      <div class="body">
+        <table id="memTable"><thead>
+          <tr><th>Customer</th><th>Visits</th><th>Orders (the “usual” is highlighted)</th></tr>
+        </thead><tbody></tbody></table>
+      </div>
+    </div>
+    <div class="sub">
+      <div class="card">
+        <h2>🕸️ Graph nodes</h2>
+        <div class="body" id="nodeList"></div>
+      </div>
+      <div class="card">
+        <h2>🔗 Relations & detected customers</h2>
+        <div class="body" id="edgeList"></div>
+      </div>
+      <div class="card">
+        <h2>👁️ Gemini visual confirmation (tables)</h2>
+        <div class="body" id="geminiCustBox"><div class="muted">no read yet</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="card">
+      <h2>📜 Event timeline</h2>
+      <div class="body" id="timeline"><div class="muted">no events yet</div></div>
+    </div>
+    <div class="card">
+      <h2>🧩 Knowledge-graph reasoning — last inference</h2>
+      <div class="body" id="reasonBox"><div class="muted">no reasoning event yet</div></div>
+    </div>
+    <div class="card">
+      <h2>🍾 Counter stock (scanned)</h2>
+      <div class="body" id="stockBox"><div class="muted">nothing scanned yet</div></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const SHARED = "shared/";
+const COLORS = {red:"#ff5c5c",orange:"#ff9f43",yellow:"#ffd23f",green:"#3fd07a",
+                blue:"#4aa3ff",purple:"#b57bff",white:"#e6edf3","":"#8b98a9"};
+const SVGNS = "http://www.w3.org/2000/svg";
+let knownNodes = new Set();
+// live-mission state fed by refresh(): robot pose + trail, status, command, moods
+let _pose=null, _trail=[], _status="", _cmd=null, _moods={};
+// stillness detector + the objects TIAGo is currently engaged with (in front
+// of, while standing still): drawn as green attention edges on the map
+let _stillRef=null, _stillSince=0, _engaged=[];
+
+function updateStillness(pose){
+  const now=Date.now()/1000;
+  if(!pose){_stillRef=null;_stillSince=0;return;}
+  if(_stillRef && Math.hypot(pose.x-_stillRef.x,pose.y-_stillRef.y)<0.07
+     && Math.abs(Math.atan2(Math.sin(pose.yaw-_stillRef.yaw),
+                            Math.cos(pose.yaw-_stillRef.yaw)))<0.12){
+    if(!_stillSince) _stillSince=now;      // stopped moving: start the clock
+  }else{
+    _stillRef={x:pose.x,y:pose.y,yaw:pose.yaw}; _stillSince=0;
+  }
+}
+const isStill=()=>_stillSince && (Date.now()/1000-_stillSince)>=2.0;
+
+// nodes inside TIAGo's facing cone while it stands still = "reached" objects
+function engagedNodes(nodes){
+  if(!_pose||!isStill()) return [];
+  return nodes.filter(n=>{
+    if(!n.centroid||n.shape==="room") return false;
+    const dx=n.centroid[0]-_pose.x, dy=n.centroid[1]-_pose.y;
+    const d=Math.hypot(dx,dy);
+    if(d<0.15||d>2.0) return false;
+    const diff=Math.atan2(Math.sin(Math.atan2(dy,dx)-_pose.yaw),
+                          Math.cos(Math.atan2(dy,dx)-_pose.yaw));
+    return Math.abs(diff)<=1.31;             // ±75° cone in front of the robot
+  });
+}
+
+// where the pulsing intent ray points while the robot is acting
+function rayTarget(state, byId){
+  if(!_cmd) return null;
+  const t=_cmd.table||{};
+  if(["approaching","serving","executing"].includes(state) && t.person)
+    return [t.person[0], t.person[1]];
+  if(state==="indicating" && _cmd.place_pos)
+    return [_cmd.place_pos[0], _cmd.place_pos[1]];
+  if(state==="going_home") return null;
+  return null;
+}
+
+async function getJSON(name){
+  try{
+    const r = await fetch(SHARED+name+"?t="+Date.now(),{cache:"no-store"});
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){ return null; }
+}
+
+function el(tag,attrs,txt){
+  const e=document.createElementNS(SVGNS,tag);
+  for(const k in attrs) e.setAttribute(k,attrs[k]);
+  if(txt!=null) e.textContent=txt;
+  return e;
+}
+
+function drawGraph(sg){
+  const svg=document.getElementById("map");
+  svg.innerHTML="";
+  const nodes=(sg&&sg.nodes)||[];
+  document.getElementById("nodeCount").textContent=nodes.length;
+  if(!nodes.length){
+    svg.appendChild(el("text",{x:400,y:300,fill:"#8b98a9","text-anchor":"middle",
+      "font-size":16},"Waiting for camera frames / scan…"));
+    return;
+  }
+  // bounds in world coords (x,y) — include the live robot pose so the marker
+  // never falls off the canvas
+  let xs=nodes.map(n=>n.centroid?n.centroid[0]:0), ys=nodes.map(n=>n.centroid?n.centroid[1]:0);
+  if(_pose){xs=xs.concat([_pose.x]); ys=ys.concat([_pose.y]);}
+  let minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
+  if(maxX-minX<1){minX-=1;maxX+=1;} if(maxY-minY<1){minY-=1;maxY+=1;}
+  const W=800,H=600,pad=60;
+  const sx=x=>pad+(x-minX)/(maxX-minX)*(W-2*pad);
+  const sy=y=>H-pad-(y-minY)/(maxY-minY)*(H-2*pad);   // flip y (north up)
+
+  // grid
+  for(let i=0;i<=4;i++){
+    svg.appendChild(el("line",{x1:pad,y1:pad+i*(H-2*pad)/4,x2:W-pad,y2:pad+i*(H-2*pad)/4,
+      stroke:"#1c2230","stroke-width":1}));
+    svg.appendChild(el("line",{x1:pad+i*(W-2*pad)/4,y1:pad,x2:pad+i*(W-2*pad)/4,y2:H-pad,
+      stroke:"#1c2230","stroke-width":1}));
+  }
+  const byId={}; nodes.forEach(n=>byId[n.node_id]=n);
+  // floor-plan underlay: a faint floor plate + tinted zones for the rooms
+  svg.insertBefore(el("rect",{x:pad-18,y:pad-18,width:W-2*pad+36,height:H-2*pad+36,
+    rx:14,fill:"#11151d",stroke:"#1c2230"}),svg.firstChild);
+  nodes.filter(n=>n.shape==="room"&&n.centroid).forEach(n=>{
+    const zx=sx(n.centroid[0]), zy=sy(n.centroid[1]);
+    const tint=n.label==="bathroom"?"#1b2a3a":"#2c2338";
+    svg.appendChild(el("circle",{cx:zx,cy:zy,r:34,fill:tint,opacity:.55}));
+  });
+  // edges
+  ((sg.edges)||[]).forEach(e=>{
+    const a=byId[e[0]], b=byId[e[2]];
+    if(a&&b&&a.centroid&&b.centroid){
+      svg.appendChild(el("line",{x1:sx(a.centroid[0]),y1:sy(a.centroid[1]),
+        x2:sx(b.centroid[0]),y2:sy(b.centroid[1]),stroke:"#3a4657","stroke-width":1.5,
+        "stroke-dasharray":"4 3"}));   // edge lines only; labels live in the side panel
+    }
+  });
+  // nodes — person icons are nudged above their table so the two don't overlap.
+  const OFF=n=> n.label==="person"?-20 : n.label==="table"?0 : 0;
+  nodes.forEach(n=>{
+    const cx=sx(n.centroid?n.centroid[0]:0), cy=sy(n.centroid?n.centroid[1]:0)+OFF(n);
+    const isNew=!knownNodes.has(n.node_id);
+    const g=el("g",{});
+    let labelY=cy-16;
+    if(n.label==="person"){
+      // ring colored by the mood read at this customer's table
+      const m=_moods[n.node_id.replace("customer_","")];
+      const ring=!m?"#4aa3ff":(m.sentiment==="positive"?"#3fb950":
+                  m.sentiment==="negative"?"#ff5c5c":"#d29922");
+      g.appendChild(el("circle",{cx,cy,r:13,fill:"#20303f",stroke:ring,"stroke-width":2.5}));
+      g.appendChild(el("text",{x:cx,y:cy+5,"text-anchor":"middle","font-size":14},"🧑"));
+      if(m&&m.emotion)
+        g.appendChild(el("text",{x:cx+14,y:cy-8,"font-size":10,fill:ring},m.emotion));
+    }else if(n.label==="table"){
+      g.appendChild(el("rect",{x:cx-13,y:cy-13,width:26,height:26,rx:4,fill:"#241b12",
+        stroke:"#6b5030","stroke-width":2}));
+      g.appendChild(el("text",{x:cx,y:cy+5,"text-anchor":"middle","font-size":13},"🍽️"));
+      labelY=cy+26;   // table label BELOW, so it never collides with the person label
+    }else if(n.label.indexOf("counter")>=0){
+      g.appendChild(el("rect",{x:cx-42,y:cy-11,width:84,height:22,rx:5,fill:"#1b2416",
+        stroke:"#4e6b3a","stroke-width":2}));
+      g.appendChild(el("text",{x:cx,y:cy+5,"text-anchor":"middle","font-size":12},"🍹"));
+      labelY=cy+24;   // counter label BELOW, the bottles sit above it
+    }else if(n.label==="hazard"||n.node_id.startsWith("fallen_drink")){
+      // pulsing red "wet floor" halo around the spill
+      const halo=el("circle",{cx,cy,r:16,fill:"none",stroke:"#ff5c5c","stroke-width":2});
+      halo.appendChild(el("animate",{attributeName:"r",values:"14;30;14",dur:"1.4s",
+        repeatCount:"indefinite"}));
+      halo.appendChild(el("animate",{attributeName:"opacity",values:".8;.1;.8",dur:"1.4s",
+        repeatCount:"indefinite"}));
+      g.appendChild(halo);
+      g.appendChild(el("circle",{cx,cy,r:12,fill:"#3a1c1c",stroke:"#ff5c5c","stroke-width":2}));
+      g.appendChild(el("text",{x:cx,y:cy+5,"text-anchor":"middle","font-size":13},
+        n.label==="hazard"?"⚠️":"🥤"));
+    }else{ // bottle / can / drink -> colored dot (NO name on the map: hover it
+           // to open the zoom lens where the bottles are shown with names)
+      const col=COLORS[n.color_name]||"#8b98a9";
+      g.appendChild(el("circle",{cx,cy,r:10,fill:col,stroke:"#0e1116","stroke-width":2}));
+      if(n.shape==="bottle"){
+        g.setAttribute("data-bottle",n.node_id);
+        g.setAttribute("cursor","pointer");
+        // enlarged invisible hit area so the hover is easy to trigger
+        g.appendChild(el("circle",{cx,cy,r:18,fill:"transparent"}));
+      }
+    }
+    if(isNew){
+      const ring=el("circle",{cx,cy,r:10,fill:"none",stroke:"#4aa3ff","stroke-width":2});
+      ring.appendChild(el("animate",{attributeName:"r",from:8,to:26,dur:"1.2s",repeatCount:"2"}));
+      ring.appendChild(el("animate",{attributeName:"opacity",from:.9,to:0,dur:"1.2s",repeatCount:"2"}));
+      g.appendChild(ring);
+    }
+    if(n.shape!=="bottle"){   // bottles carry no map label: names live in the lens
+      const lbl=((n.color_name&&!n.label.startsWith(n.color_name))?n.color_name+" ":"")
+        +(n.label==="person"?n.node_id.replace("customer_",""):n.label);
+      g.appendChild(el("text",{x:cx,y:labelY,fill:"#c7d1dc","font-size":10,
+        "text-anchor":"middle"},lbl));
+    }
+    svg.appendChild(g);
+  });
+  knownNodes=new Set(nodes.map(n=>n.node_id));
+
+  // ── live ROBOT: fading breadcrumb trail + oriented marker + action ray ──
+  document.getElementById("hazardBanner").style.display =
+    nodes.some(n=>n.label==="hazard"||n.node_id.startsWith("fallen_drink"))?"block":"none";
+  _engaged=[];
+  if(_pose){
+    if(_trail.length>1){
+      const seg=_trail.length-1;
+      _trail.slice(0,-1).forEach((p,i)=>{
+        const q=_trail[i+1];
+        svg.appendChild(el("line",{x1:sx(p.x),y1:sy(p.y),x2:sx(q.x),y2:sy(q.y),
+          stroke:"#4aa3ff","stroke-width":2,"stroke-linecap":"round",
+          opacity:(0.05+0.5*(i+1)/seg).toFixed(2)}));
+      });
+    }
+    // pulsing dashed INTENT ray robot -> current target while acting
+    const act=(_status||"");
+    const tgt=rayTarget(act,byId);
+    if(tgt){
+      const ray=el("line",{x1:sx(_pose.x),y1:sy(_pose.y),x2:sx(tgt[0]),y2:sy(tgt[1]),
+        stroke:"#d29922","stroke-width":2.5,"stroke-dasharray":"8 6"});
+      ray.appendChild(el("animate",{attributeName:"stroke-dashoffset",
+        values:"28;0",dur:"0.8s",repeatCount:"indefinite"}));
+      svg.appendChild(ray);
+    }
+    // ENGAGEMENT edges: TIAGo stands still in front of something -> a green
+    // link is established with each object in its facing cone ("reached it")
+    _engaged=engagedNodes(nodes);
+    _engaged.forEach(n=>{
+      const ex=sx(n.centroid[0]), ey=sy(n.centroid[1]);
+      const ln=el("line",{x1:sx(_pose.x),y1:sy(_pose.y),x2:ex,y2:ey,
+        stroke:"#3fd07a","stroke-width":2.5,"stroke-linecap":"round"});
+      ln.appendChild(el("animate",{attributeName:"opacity",values:".9;.35;.9",
+        dur:"1.6s",repeatCount:"indefinite"}));
+      svg.appendChild(ln);
+      const tip=el("circle",{cx:ex,cy:ey,r:5,fill:"none",stroke:"#3fd07a",
+        "stroke-width":2});
+      tip.appendChild(el("animate",{attributeName:"r",values:"4;9;4",dur:"1.6s",
+        repeatCount:"indefinite"}));
+      svg.appendChild(tip);
+    });
+    // TIAGo marker: heading triangle inside a ring, always on top
+    const rx=sx(_pose.x), ry=sy(_pose.y), a=-_pose.yaw;   // svg y is flipped
+    const P=(r,da)=>`${rx+r*Math.cos(a+da)},${ry+r*Math.sin(a+da)}`;
+    const rg=el("g",{});
+    rg.appendChild(el("circle",{cx:rx,cy:ry,r:14,fill:"#0e1116",stroke:"#4aa3ff",
+      "stroke-width":2.5}));
+    rg.appendChild(el("polygon",{points:`${P(10,0)} ${P(8,2.5)} ${P(8,-2.5)}`,
+      fill:"#4aa3ff"}));
+    rg.appendChild(el("text",{x:rx,y:ry-19,"text-anchor":"middle","font-size":10,
+      fill:"#9fd0ff","font-weight":"700"},"TIAGo"));
+    svg.appendChild(rg);
+  }
+  // keep view params for the hover zoom lens, and re-draw it after re-render
+  _view={nodes,sx,sy};
+  drawLens();
+  // legend
+  const seen=[...new Set(nodes.map(n=>n.color_name).filter(Boolean))];
+  const L=document.getElementById("legend");
+  L.innerHTML="";
+  L.appendChild(Object.assign(document.createElement("span"),{innerHTML:"🧑 person (customer)"}));
+  L.appendChild(Object.assign(document.createElement("span"),{innerHTML:"🍽️ table"}));
+  if(nodes.some(n=>n.label==="hazard"))
+    L.appendChild(Object.assign(document.createElement("span"),{innerHTML:"⚠️ possible spill"}));
+  seen.forEach(c=>{
+    const s=document.createElement("span");
+    s.innerHTML=`<i class="sw" style="background:${COLORS[c]||'#888'}"></i>${c} can`;
+    L.appendChild(s);
+  });
+}
+
+// ── Hover ZOOM LENS ──────────────────────────────────────────────────────────
+// The map shows the bottles as anonymous colored dots; hovering one opens a
+// magnified window rendering the whole counter row with each bottle's NAME.
+// The map re-renders every second, so hover state is kept globally and the
+// events are DELEGATED on the svg (they survive the innerHTML wipe).
+let _view=null, hoverBottle=null;
+
+function removeLens(){const L=document.getElementById("lens"); if(L) L.remove();}
+
+function drawLens(){
+  removeLens();
+  if(!_view||!hoverBottle) return;
+  const byId={}; _view.nodes.forEach(n=>byId[n.node_id]=n);
+  const h=byId[hoverBottle];
+  if(!h||!h.centroid){hoverBottle=null; return;}
+  // the bottles of the SAME counter row (close in y, within reach in x)
+  const row=_view.nodes.filter(n=>n.shape==="bottle"&&n.centroid&&
+      Math.abs(n.centroid[1]-h.centroid[1])<0.8&&
+      Math.abs(n.centroid[0]-h.centroid[0])<=1.8)
+    .sort((a,b)=>a.centroid[0]-b.centroid[0]);
+  if(!row.length) return;
+  const LW=Math.max(190,row.length*72+50), LH=132;
+  let lx=_view.sx(h.centroid[0])-LW/2, ly=_view.sy(h.centroid[1])-LH-26;
+  lx=Math.max(8,Math.min(800-LW-8,lx));
+  if(ly<8) ly=Math.min(600-LH-8,_view.sy(h.centroid[1])+26);
+  const g=el("g",{id:"lens","pointer-events":"none"});
+  g.appendChild(el("rect",{x:lx,y:ly,width:LW,height:LH,rx:10,fill:"#161b22",
+    stroke:"#4aa3ff","stroke-width":1.5,opacity:.97}));
+  g.appendChild(el("text",{x:lx+12,y:ly+17,fill:"#8b98a9","font-size":10},
+    "🔍 zoom — bottles on this counter"));
+  // the counter surface the bottles stand on
+  g.appendChild(el("rect",{x:lx+14,y:ly+LH-40,width:LW-28,height:12,rx:4,
+    fill:"#1b2416",stroke:"#4e6b3a","stroke-width":1.5}));
+  const xs=row.map(n=>n.centroid[0]);
+  const minx=Math.min(...xs), maxx=Math.max(...xs);
+  const px=x=> row.length>1 ? lx+34+(x-minx)/((maxx-minx)||1)*(LW-68) : lx+LW/2;
+  row.forEach(n=>{
+    const cx=px(n.centroid[0]), base=ly+LH-40;   // bottles sit ON the counter
+    const col=COLORS[n.color_name]||"#8b98a9";
+    const hov=n.node_id===hoverBottle;
+    if(hov) g.appendChild(el("rect",{x:cx-16,y:base-52,width:32,height:56,rx:6,
+      fill:"none",stroke:"#4aa3ff","stroke-width":1.5,"stroke-dasharray":"3 2"}));
+    g.appendChild(el("rect",{x:cx-8,y:base-30,width:16,height:30,rx:4,
+      fill:col,stroke:"#0e1116","stroke-width":1.5}));          // body
+    g.appendChild(el("rect",{x:cx-3,y:base-40,width:6,height:11,rx:2,
+      fill:col,stroke:"#0e1116","stroke-width":1}));            // neck
+    g.appendChild(el("text",{x:cx,y:ly+LH-13,"text-anchor":"middle",
+      "font-size":11,"font-weight":hov?"700":"400",
+      fill:hov?"#4aa3ff":"#e6edf3"},n.label));
+  });
+  document.getElementById("map").appendChild(g);
+}
+
+document.getElementById("map").addEventListener("mouseover",e=>{
+  const g=e.target.closest&&e.target.closest("[data-bottle]");
+  if(g){hoverBottle=g.getAttribute("data-bottle"); drawLens();}
+});
+document.getElementById("map").addEventListener("mouseout",e=>{
+  const g=e.target.closest&&e.target.closest("[data-bottle]");
+  if(g&&hoverBottle===g.getAttribute("data-bottle")){hoverBottle=null; removeLens();}
+});
+
+// Natural-language SPATIAL INSIGHTS for the top-down view: turn the scene
+// graph edges into readable sentences ("the sprite is left of the coca cola",
+// "the water is on top of the counter east", "male03 is at table 2").
+const REL_TEXT={isOnTopOf:"is on top of", isLeftOf:"is left of",
+                isRightOf:"is right of", isAtTable:"is at"};
+const REL_ORDER=["isOnTopOf","isLeftOf","isRightOf","isAtTable"];  // no "near"
+function nodeName(byId,id){
+  const n=byId[id];
+  if(!n) return id.replace(/_/g," ");
+  if(n.label==="person") return n.node_id.replace("customer_","");
+  if(n.label==="table") return n.node_id.replace("_"," ");
+  return n.label;
+}
+function minorBadge(byId,id){
+  const n=byId[id];
+  return (n&&n.label==="person"&&n.is_minor)?'<span class="minor">MINORENNE</span>':"";
+}
+// ── Scene graph AS A GRAPH: nodes in layers, labelled relation edges ─────────
+// The map above answers "where is everything"; this answers "how is it all
+// connected" — the structure the course decks call the semantic map, drawn
+// straight from the same nodes and edges the robot reasons over.
+const GRAPH_ROWS = [
+  {test: n => n.label === "person",             y: 60,  fill: "#20303f", stroke: "#4aa3ff", icon: "🧑"},
+  {test: n => n.label === "table",              y: 160, fill: "#241b12", stroke: "#6b5030", icon: "🍽️"},
+  {test: n => n.label.indexOf("counter") >= 0,  y: 260, fill: "#1b2416", stroke: "#4e6b3a", icon: "🍹"},
+  {test: n => true,                             y: 360, fill: "#1c2230", stroke: "#8b98a9", icon: ""},
+];
+const REL_COLOR = {isAtTable: "#4aa3ff", isOnTopOf: "#3fd07a",
+                   isLeftOf: "#d29922", isRightOf: "#d29922", near: "#3a4657"};
+
+function graphNodeName(n){
+  if (n.label === "person") return n.node_id.replace("customer_", "");
+  if (n.label === "table")  return n.node_id.replace("_", " ");
+  return n.label;
+}
+
+function drawNodeGraph(sg){
+  const svg = document.getElementById("graphSvg");
+  if (!svg) return;
+  svg.innerHTML = "";
+  const nodes = ((sg && sg.nodes) || []).filter(n => n.shape !== "room");
+  if (!nodes.length){
+    svg.appendChild(el("text", {x:450, y:210, fill:"#8b98a9", "text-anchor":"middle",
+      "font-size":15}, "the graph fills in as the robot perceives…"));
+    return;
+  }
+  const W = 900;
+  const rows = GRAPH_ROWS.map(() => []);
+  nodes.forEach(n => {
+    for (let i = 0; i < GRAPH_ROWS.length; i++){
+      if (GRAPH_ROWS[i].test(n)){ rows[i].push(n); break; }
+    }
+  });
+  // horizontal position: spread each layer evenly, keep map order left-to-right
+  const pos = {};
+  rows.forEach((row, i) => {
+    row.sort((a,b) => ((a.centroid||[0])[0]||0) - ((b.centroid||[0])[0]||0));
+    row.forEach((n, k) => {
+      pos[n.node_id] = {x: (W / (row.length + 1)) * (k + 1), y: GRAPH_ROWS[i].y, row: i};
+    });
+  });
+  // edges first, so the node chips sit on top of them
+  ((sg.edges) || []).forEach(e => {
+    const a = pos[e[0]], b = pos[e[2]];
+    if (!a || !b) return;
+    const col = REL_COLOR[e[1]] || "#3a4657";
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const bend = a.row === b.row ? 34 : 0;   // same layer: arc so it stays readable
+    svg.appendChild(el("path", {
+      d: `M ${a.x} ${a.y} Q ${mx} ${my - bend} ${b.x} ${b.y}`,
+      fill: "none", stroke: col, "stroke-width": 1.6,
+      "stroke-dasharray": e[1] === "near" ? "4 4" : "none", opacity: .85}));
+    svg.appendChild(el("text", {x: mx, y: my - bend - 4, fill: col, "font-size": 9,
+      "text-anchor": "middle"}, e[1]));
+  });
+  // node chips
+  nodes.forEach(n => {
+    const p = pos[n.node_id];
+    if (!p) return;
+    const spec = GRAPH_ROWS[p.row];
+    const name = graphNodeName(n);
+    const w = Math.max(58, name.length * 7 + 24);
+    const g = el("g", {});
+    const col = (n.label === "person" || n.label === "table" ||
+                 n.label.indexOf("counter") >= 0)
+      ? spec.stroke : (COLORS[n.color_name] || spec.stroke);
+    g.appendChild(el("rect", {x: p.x - w/2, y: p.y - 15, width: w, height: 30, rx: 9,
+      fill: spec.fill, stroke: col, "stroke-width": 2,
+      opacity: n.status === "uncertain" ? .45 : 1}));
+    g.appendChild(el("text", {x: p.x, y: p.y + 5, "text-anchor": "middle",
+      "font-size": 11, fill: "#e6edf3"},
+      (spec.icon ? spec.icon + " " : "") + name));
+    if (n.is_minor)
+      g.appendChild(el("text", {x: p.x, y: p.y - 20, "text-anchor": "middle",
+        "font-size": 9, fill: "#ffc978", "font-weight": "700"}, "MINOR"));
+    svg.appendChild(g);
+  });
+  // layer captions, so the structure reads without a legend
+  [["customers", 60], ["tables", 160], ["counters", 260], ["items", 360]]
+    .forEach(([t, y]) => svg.appendChild(
+      el("text", {x: 8, y: y - 22, fill: "#8b98a9", "font-size": 10}, t)));
+}
+
+function drawInsights(sg){
+  const box=document.getElementById("insights");
+  const nodes=(sg&&sg.nodes)||[], edges=(sg&&sg.edges)||[];
+  const byId={}; nodes.forEach(n=>byId[n.node_id]=n);
+  const art=id=>{const n=byId[id];return (n&&n.label==="person")?"":"the ";};
+  const seen=new Set(), out=[];
+  REL_ORDER.forEach(rel=>{
+    edges.filter(e=>e[1]===rel).forEach(e=>{
+      // skip "near" pairs already explained by a more specific relation
+      const key=[e[0],e[2]].sort().join("|");
+      if(rel==="near"&&seen.has(key)) return;
+      seen.add(key);
+      out.push(`<span class="tag">${art(e[0])}<b>${nodeName(byId,e[0])}</b>`+
+               `${minorBadge(byId,e[0])} `+
+               `<i>${REL_TEXT[rel]}</i> ${art(e[2])}<b>${nodeName(byId,e[2])}</b>`+
+               `${minorBadge(byId,e[2])}</span>`);
+    });
+  });
+  // TIAGo's live engagements first: what it has reached and stands in front of
+  const eng=_engaged.map(n=>
+    `<span class="tag">🤖 <b>TIAGo</b> <i style="color:#3fd07a">is in front of</i> `+
+    `${art(n.node_id)}<b>${nodeName(byId,n.node_id)}</b></span>`);
+  const all=eng.concat(out);
+  box.innerHTML = all.length
+    ? `🔎 <b>spatial insights:</b> ${all.join(" ")}`
+    : '<span class="muted">🔎 spatial insights appear as objects are perceived…</span>';
+}
+
+function drawNodeList(sg){
+  const box=document.getElementById("nodeList");
+  const nodes=(sg&&sg.nodes)||[];
+  box.innerHTML = nodes.length? "" : '<div class="muted">no nodes yet</div>';
+  nodes.forEach(n=>{
+    const d=document.createElement("div");
+    d.className="nodeRow";
+    const c=n.color_name?`<i class="sw" style="background:${COLORS[n.color_name]||'#888'}"></i> `:"";
+    const aff=(n.affordances&&n.affordances.length)?
+      `<div class="muted" style="padding-left:14px">↳ affords: ${n.affordances.join(", ")}</div>`:"";
+    const mb=(n.label==="person"&&n.is_minor)?'<span class="minor">MINORENNE</span>':"";
+    d.innerHTML=`${c}<b>${n.node_id}</b>${mb} — ${(n.color_name?n.color_name+' ':'')}${n.label} `+
+      `<span class="muted">[${n.status||'?'}] · (${(n.centroid||[]).map(v=>v.toFixed?v.toFixed(1):v).join(', ')})</span>${aff}`;
+    box.appendChild(d);
+  });
+}
+
+function drawEdges(sg, present){
+  const box=document.getElementById("edgeList");
+  box.innerHTML="";
+  // "near" is geometric noise next to the specific relations — hidden here
+  // (it stays in the graph data, where grounding still uses it)
+  const edges=((sg&&sg.edges)||[]).filter(e=>e[1]!=="near");
+  if(edges.length){
+    edges.forEach(e=>{
+      const d=document.createElement("div"); d.className="nodeRow";
+      d.innerHTML=`<b>${e[0]}</b> <span style="color:var(--accent)">${e[1]}</span> <b>${e[2]}</b>`;
+      box.appendChild(d);
+    });
+  } else box.innerHTML='<div class="muted">no relations yet</div>';
+  if(present&&present.present&&present.present.length){
+    const h=document.createElement("div"); h.className="muted";
+    h.style.margin="8px 0 4px"; h.textContent="Customers detected in the scan:";
+    box.appendChild(h);
+    present.present.forEach(c=>{
+      const s=document.createElement("span"); s.className="chip";
+      s.textContent=`${c.entity} → table ${c.table_id}`;
+      box.appendChild(s);
+    });
+  }
+}
+
+// Visual CONFIRMATION only — ground-truth (present.present) stays the real
+// source of identity/age; this just shows whether Gemini's own read of the
+// overhead camera agrees with it, table by table — plus the model's OWN
+// reasoning sentence and its per-table state inference (needs-attention/
+// finished), so the reasoning is visible, not just a final label.
+const STATE_BADGE={"needs-attention":"🙋 needs attention","finished":"🧾 finished",
+  "active":"·"};
+function drawGeminiCustomers(gem, present){
+  const box=document.getElementById("geminiCustBox");
+  if(!gem||!gem.ts){box.innerHTML='<div class="muted">no read yet</div>';return;}
+  const age=Date.now()/1000-gem.ts;
+  const seenTables=new Set(((present&&present.present)||[]).map(c=>c.table_id));
+  const geminiTables=new Set(gem.tables||[]);
+  const states=gem.table_states||{};
+  const all=new Set([...seenTables,...geminiTables]);
+  const rows=[...all].sort((a,b)=>a-b).map(tid=>{
+    const g=geminiTables.has(tid), s=seenTables.has(tid);
+    const agree=g===s;
+    const st=states[tid]||states[String(tid)];
+    const badge=(g&&st&&STATE_BADGE[st]&&st!=="active")?
+      ` <span style="color:var(--warn)">${STATE_BADGE[st]}</span>`:"";
+    return `<div class="nodeRow"><b>table ${tid}</b> `+
+      `<span style="color:${g?'#3fb950':'#8b98a9'}">Gemini: ${g?'occupied':'empty'}</span> · `+
+      `<span style="color:${s?'#3fb950':'#8b98a9'}">ground-truth: ${s?'occupied':'empty'}</span> `+
+      `${agree?'✅':'<span style=\"color:var(--warn)\">⚠️ mismatch</span>'}${badge}</div>`;
+  }).join("");
+  const reasoning=gem.reasoning?
+    `<div class="muted" style="margin-top:6px;font-style:italic">"${gem.reasoning}"</div>`:"";
+  box.innerHTML=(rows||'<div class="muted">no tables reported yet</div>')+reasoning+
+    `<div class="muted" style="margin-top:6px">last read ${age<60?Math.round(age)+"s ago":"stale"}</div>`;
+}
+
+function drawMemory(cust){
+  const tb=document.querySelector("#memTable tbody");
+  tb.innerHTML="";
+  const ids=cust?Object.keys(cust):[];
+  document.getElementById("custCount").textContent=ids.length;
+  if(!ids.length){ tb.innerHTML='<tr><td colspan="3" class="muted">memory empty</td></tr>'; return; }
+  ids.forEach(id=>{
+    const p=cust[id], orders=p.orders||[];
+    const usual = orders.length?orders[orders.length-1]:null;
+    const chips = orders.map((o,i)=>`<span class="chip ${o===usual&&i===orders.length-1?'usual':''}">${o}</span>`).join("");
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td><b>${p.name||id}</b></td><td>${p.visits||0}</td>`+
+      `<td>${chips||'<span class="muted">—</span>'}`+
+      `${usual?`<div class="muted" style="margin-top:4px">usual: <b style="color:#9fd0ff">${usual}</b></div>`:''}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+// ── mission STEP TRACKER (header) ────────────────────────────────────────────
+const STEPS=["idle","explore","take order","fetch & serve","home"];
+const STATE_STEP={exploring:1,explored:1,approaching:2,at_customer:2,indicating:2,
+  indicated:2,received:3,executing:3,serving:3,done:3,failed:3,going_home:4,home:4};
+function drawSteps(state){
+  const idx=STATE_STEP[state]??0;
+  document.getElementById("steps").innerHTML=STEPS.map((s,i)=>
+    `<span class="st ${i===idx?'on':''}">${s}</span>`).join('<span class="sep">›</span>');
+}
+
+// ── EVENT TIMELINE (bottom left) ─────────────────────────────────────────────
+let _lastEvCount=0;
+function drawTimeline(ev){
+  const box=document.getElementById("timeline");
+  const events=(ev&&ev.events)||[];
+  if(!events.length){box.innerHTML='<div class="muted">no events yet</div>';_lastEvCount=0;return;}
+  box.innerHTML=events.slice().reverse().map((e,i)=>{
+    const t=new Date(e.ts*1000).toLocaleTimeString();
+    const fresh=events.length>_lastEvCount && i<events.length-_lastEvCount;
+    return `<div class="ev ${fresh?'new':''}"><span class="t">${t}</span>`+
+           `<span>${e.icon||"•"}</span><span>${e.text}</span></div>`;
+  }).join("");
+  _lastEvCount=events.length;
+}
+
+// ── KG REASONING chain (bottom middle): last event that carried triples ─────
+function drawReasoning(ev){
+  const box=document.getElementById("reasonBox");
+  const events=((ev&&ev.events)||[]).filter(e=>e.triples&&e.triples.length);
+  if(!events.length){box.innerHTML='<div class="muted">no reasoning event yet</div>';return;}
+  const last=events[events.length-1];
+  const chain=last.triples.map(t=>
+    `<span class="rnode">${t[0]}</span><span class="rrel">—${t[1]}→</span>`+
+    `<span class="rnode">${t[2]}</span>`).join('<br>');
+  box.innerHTML=`<div class="muted" style="margin-bottom:6px">${last.icon||""} ${last.text}</div>${chain}`;
+}
+
+// ── COUNTER STOCK shelf (bottom right): the scanned drinks ──────────────────
+// Known bar lineup (graph.vlm_perception.DRINK_LAYOUT) — matched by LABEL,
+// not node_id: the live Gemini path (TemporalManager._new_id) assigns ids
+// like "coca_cola_1"/"pringles_2", never the "drink_"-prefixed ids the old
+// ground-truth scan used to produce, so a node_id-prefix filter silently
+// showed nothing for every real (non-rehearsal) recognition.
+const DRINK_NAMES=new Set(["coca cola","sprite","water","juice","pringles","wine"]);
+function drawStock(sg){
+  const box=document.getElementById("stockBox");
+  const drinks=((sg&&sg.nodes)||[]).filter(n=>DRINK_NAMES.has(n.label));
+  if(!drinks.length){box.innerHTML='<div class="muted">nothing scanned yet</div>';return;}
+  box.innerHTML=drinks.map(n=>{
+    const col=COLORS[n.color_name]||"#8b98a9";
+    const veto=n.label==="wine";
+    const gone=n.status==="uncertain";
+    return `<span class="drink ${veto||gone?'veto':''}">`+
+      `<span class="bot" style="background:${col}"></span><b>${n.label}</b>`+
+      `${veto?'<span class="tagv">🔞 adults only</span>':''}`+
+      `${gone?'<span class="tagv">not seen</span>':''}</span>`;
+  }).join("");
+}
+
+const VERDICT={SERVE:["#12351f","#3fb950","act"],ASK_HUMAN:["#3a2e12","#d29922","ask human"],
+               DECLINE:["#3a1f24","#ff9aa2","refuse"]};
+function scoreColor(v){return v>=0.66?"#3fb950":v>=0.33?"#d29922":"#ff5c5c";}
+
+function drawAwareness(aw){
+  const box=document.getElementById("awareBox");
+  const d=aw&&aw.latest;
+  if(!d){box.innerHTML='<div class="muted">no decision yet</div>';return;}
+  const [bg,fg,verb]=VERDICT[d.action]||["#1c2230","#8b98a9",d.action||"?"];
+  const row=(lbl,v)=>{
+    const pct=Math.round(100*Math.max(0,Math.min(1,v??0)));
+    return `<div class="scoreRow"><span class="lbl">${lbl}</span>`+
+      `<span class="bar"><i style="width:${pct}%;background:${scoreColor(v??0)}"></i></span>`+
+      `<span class="val">${(v??0).toFixed(2)}</span></div>`;
+  };
+  const failed=((d.details||{}).trace||[]).find(s=>!s.ok);
+  box.innerHTML=
+    `<div style="font-size:13px;margin-bottom:6px">“${d.request||"—"}”`+
+    `<span class="verdict" style="background:${bg};color:${fg}">${verb}${d.item?": "+d.item:""}</span>`+
+    `<span class="muted" style="margin-left:6px">[${d.source} scores]</span></div>`+
+    row("Perception P",d.P)+row("Comprehension C",d.C)+row("Projection Pr",d.Pr)+
+    row("Feasibility Ft",d.Ft)+
+    (failed?`<div class="muted" style="margin-top:4px">⛔ plan breaks at <b>${failed.step}</b>: ${failed.unmet.join("; ")}</div>`:"")+
+    (d.reasoning?`<div class="muted" style="margin-top:4px">${d.reasoning}</div>`:"");
+}
+
+async function refresh(){
+  const [sg,cust,present,status,aware,pose,events,moods,cmd,geminiCust]=await Promise.all([
+    getJSON("scene_graph.json"), getJSON("customers.json"),
+    getJSON("customers_present.json"), getJSON("status.json"),
+    getJSON("awareness.json"), getJSON("robot_pose.json"),
+    getJSON("events.json"), getJSON("customer_moods.json"),
+    getJSON("command.json"), getJSON("gemini_customer_check.json")]);
+  _status=(status&&status.state)||""; _cmd=cmd; _moods=moods||{};
+  // robot pose + breadcrumb trail (only fresh poses: the bridge writes ~1.5 s)
+  if(pose&&pose.ts&&(Date.now()/1000-pose.ts)<10){
+    _pose=pose;
+    const last=_trail[_trail.length-1];
+    if(!last||Math.hypot(pose.x-last.x,pose.y-last.y)>0.06){
+      _trail.push({x:pose.x,y:pose.y});
+      if(_trail.length>150) _trail.shift();
+    }
+  } else _pose=null;
+  updateStillness(_pose);
+  drawGraph(sg); drawNodeGraph(sg); drawInsights(sg); drawNodeList(sg); drawEdges(sg,present); drawMemory(cust);
+  drawAwareness(aware); drawSteps(_status); drawTimeline(events);
+  drawReasoning(events); drawStock(sg); drawGeminiCustomers(geminiCust,present);
+  document.getElementById("robotState").textContent=_status||"—";
+  document.getElementById("clock").textContent=new Date().toLocaleTimeString();
+}
+// Reset button: clears customers.json on the data server (fresh demo). Memory is
+// persistent BY DESIGN (returning-customer "usual"), so this is a manual action.
+document.getElementById("resetBtn").onclick = async () => {
+  if(!confirm("Clear ALL customer memory (visits and past orders)?")) return;
+  const base = SHARED.replace(/shared\/$/, "");
+  try{ const r = await fetch(base+"reset-memory"); if(!r.ok) throw 0; }
+  catch(e){ alert("Reset failed — is the data server on :8077 running?"); }
+  refresh();
+};
+refresh(); setInterval(refresh,1000);
+</script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Godspeed Questionnaire — TIAGo Waiter</title>
+<style>
+  body { font-family: -apple-system, Helvetica, Arial, sans-serif; max-width: 720px;
+         margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; line-height: 1.4; }
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1.05rem; margin-top: 2rem; border-bottom: 1px solid #ddd; padding-bottom: .3rem; }
+  .item { margin: 1.1rem 0; }
+  .item .labels { display: flex; justify-content: space-between; font-size: .85rem; color: #555; }
+  .item .scale { display: flex; justify-content: space-between; margin-top: .25rem; }
+  .item .scale label { display: flex; flex-direction: column; align-items: center; font-size: .8rem; }
+  fieldset { border: none; padding: 0; margin: 0; }
+  select#condition, input#participant { font-size: 1rem; padding: .3rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .meta label { display: flex; flex-direction: column; font-size: .85rem; gap: .2rem; }
+  button { font-size: 1rem; padding: .6rem 1.2rem; margin-top: 2rem; cursor: pointer; }
+  #result { margin-top: 1.5rem; padding: 1rem; background: #f4f4f4; border-radius: 6px;
+            white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: .85rem; display: none; }
+  .note { font-size: .82rem; color: #666; }
+</style>
+</head>
+<body>
+
+<h1>Godspeed Questionnaire — TIAGo Waiter</h1>
+<p class="note">Bartneck et al. (2009), standard 5-point semantic differential.
+Rate the robot you just interacted with on each pair of words below (1 = fully
+matches the LEFT word, 5 = fully matches the RIGHT word).</p>
+
+<div class="meta">
+  <label>Participant ID
+    <input id="participant" placeholder="e.g. P1">
+  </label>
+  <label>Condition
+    <select id="condition">
+      <option value="proxemics_on">Proxemics ON (feature)</option>
+      <option value="proxemics_off">Proxemics OFF (control)</option>
+      <option value="reorder_on">Priority reorder ON (feature)</option>
+      <option value="reorder_off">Priority reorder OFF (control)</option>
+    </select>
+  </label>
+</div>
+
+<form id="gs-form"></form>
+
+<button onclick="computeResults()">Compute subscale scores</button>
+<div id="result"></div>
+
+<script>
+// Godspeed subscales (Bartneck, Kulić, Croft & Zoghbi, 2009), 5-point items.
+const SUBSCALES = {
+  "Anthropomorphism": [
+    ["Fake", "Natural"], ["Machinelike", "Humanlike"],
+    ["Unconscious", "Conscious"], ["Artificial", "Lifelike"],
+    ["Moving rigidly", "Moving elegantly"]
+  ],
+  "Animacy": [
+    ["Dead", "Alive"], ["Stagnant", "Lively"], ["Mechanical", "Organic"],
+    ["Artificial", "Lifelike"], ["Inert", "Interactive"], ["Apathetic", "Responsive"]
+  ],
+  "Likeability": [
+    ["Dislike", "Like"], ["Unfriendly", "Friendly"], ["Unkind", "Kind"],
+    ["Unpleasant", "Pleasant"], ["Awful", "Nice"]
+  ],
+  "Perceived Intelligence": [
+    ["Incompetent", "Competent"], ["Ignorant", "Knowledgeable"],
+    ["Irresponsible", "Responsible"], ["Unintelligent", "Intelligent"],
+    ["Foolish", "Sensible"]
+  ],
+  "Perceived Safety": [
+    ["Anxious", "Relaxed"], ["Agitated", "Calm"], ["Quiescent", "Surprised"]
+  ]
+};
+
+const form = document.getElementById("gs-form");
+let itemIndex = 0;
+const itemIds = [];
+for (const [subscale, items] of Object.entries(SUBSCALES)) {
+  const h2 = document.createElement("h2");
+  h2.textContent = subscale;
+  form.appendChild(h2);
+  items.forEach(([left, right]) => {
+    const id = "item" + (itemIndex++);
+    itemIds.push({ id, subscale });
+    const div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML = `
+      <div class="labels"><span>${left}</span><span>${right}</span></div>
+      <div class="scale">
+        ${[1,2,3,4,5].map(v => `
+          <label><input type="radio" name="${id}" value="${v}" ${v===3?"checked":""}> ${v}</label>
+        `).join("")}
+      </div>`;
+    form.appendChild(div);
+  });
+}
+
+function computeResults() {
+  const participant = document.getElementById("participant").value || "unknown";
+  const condition = document.getElementById("condition").value;
+  const bySubscale = {};
+  itemIds.forEach(({ id, subscale }) => {
+    const checked = form.querySelector(`input[name="${id}"]:checked`);
+    const val = checked ? parseInt(checked.value, 10) : null;
+    (bySubscale[subscale] = bySubscale[subscale] || []).push(val);
+  });
+  const scores = {};
+  for (const [subscale, vals] of Object.entries(bySubscale)) {
+    const valid = vals.filter(v => v !== null);
+    scores[subscale] = valid.length
+      ? +(valid.reduce((a, b) => a + b, 0) / valid.length).toFixed(2)
+      : null;
+  }
+  const record = { participant, condition, scores, ts: new Date().toISOString() };
+  const box = document.getElementById("result");
+  box.style.display = "block";
+  box.textContent =
+    "Copy this JSON line into godspeed_results.jsonl (one line per participant/condition):\n\n" +
+    JSON.stringify(record);
+}
+</script>
+
+</body>
+</html>

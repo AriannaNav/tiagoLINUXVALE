@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Versione macOS della config CycloneDDS per waiter_robot.
+
+  Identica a cyclonedds_config.xml MA con MinimumSocketReceiveBufferSize
+  abbassato: sul Mac la VM di Docker Desktop non espone net.core.rmem_max
+  e il kernel concede solo ~0,4 MB, quindi richiedere 10 MB fa fallire la
+  creazione del nodo ("failed to increase socket receive buffer size...").
+
+  Le due righe che correggono davvero il bug motion_name='' di play_motion2
+  (MaxMessageSize / FragmentSize) restano invariate.
+-->
+<CycloneDDS>
+  <Domain>
+    <Internal>
+      <MaxMessageSize>65500B</MaxMessageSize>
+      <FragmentSize>4000B</FragmentSize>
+      <MinimumSocketReceiveBufferSize>262144B</MinimumSocketReceiveBufferSize>
+    </Internal>
+  </Domain>
+</CycloneDDS>

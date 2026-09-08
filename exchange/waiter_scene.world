@@ -1,0 +1,708 @@
+<?xml version="1.0" ?>
+<!--
+  Waiter-robot scene for TIAGo simulation.
+
+  Persons and object positions (map frame):
+    male03       (4.0,  0.53, 0.0)  – customer 1 (main)
+    female02     (-2.84,-2.63, 0.0) – customer 2
+    female03     (-3.3,  5.8, 0.0)  – customer 3
+    female02bis  (4.0,  7.0,  0.0)  – customer 4
+    kitchen_table (2.0, -3.551, 0.0) – prep area
+    sprite_bottle (2.0, -3.55, 0.93) – drink on table  ← grab target
+
+  Room: approx 14 m × 16 m (x: -6..8  y: -6..10)
+-->
+<sdf version="1.4">
+  <world name="default">
+    <physics type="ode">
+      <gravity>0 0 -9.81</gravity>
+      <ode>
+        <solver>
+          <type>quick</type>
+          <iters>20</iters>
+          <sor>1.0</sor>
+        </solver>
+        <constraints>
+          <cfm>0.0</cfm>
+          <erp>0.2</erp>
+          <contact_max_correcting_vel>100.0</contact_max_correcting_vel>
+          <contact_surface_layer>0.0</contact_surface_layer>
+        </constraints>
+      </ode>
+      <real_time_update_rate>1000</real_time_update_rate>
+      <max_step_size>0.001</max_step_size>
+    </physics>
+
+    <!-- Scena: niente griglia a terra, sfondo scuro, luce ambiente calda
+         da bar. Cosi' oltre le mura non si vede altro (vuoto). -->
+    <scene>
+      <ambient>0.55 0.52 0.48 1</ambient>
+      <background>0.05 0.05 0.06 1</background>
+      <shadows>0</shadows>
+      <grid>0</grid>
+      <origin_visual>0</origin_visual>
+    </scene>
+
+    <include><uri>model://sun</uri></include>
+    <!-- Terreno "vuoto": grande piano scuro con collisione (sostituisce
+         model://ground_plane). Le piastrelle di marmo coprono la stanza
+         sopra; fuori dalle mura resta buio, nessun ground grigio infinito.
+         Nome tenuto "ground_plane" per compatibilita' col codice. -->
+    <model name="ground_plane"><static>true</static><pose>1.0 2.0 0 0 0 0</pose><link name="l">
+      <collision name="c"><pose>0 0 -0.05 0 0 0</pose><geometry><box><size>80 80 0.1</size></box></geometry></collision>
+      <visual name="v"><pose>0 0 -0.12 0 0 0</pose><geometry><box><size>80 80 0.1</size></box></geometry>
+        <material><ambient>0.03 0.03 0.04 1</ambient><diffuse>0.04 0.04 0.05 1</diffuse></material></visual>
+    </link></model>
+
+    <!-- Pavimento in PARQUET: modello wood_floor incluso (texture legno Poly
+         Haven, CC0). Spawnato come modello -> Ogre parsa il materiale/texture. -->
+    <include><name>dining_floor</name><uri>model://wood_floor</uri><pose>1.0 2.0 0.02 0 0 0</pose></include>
+
+
+    <!-- Default GUI camera: elevated 3/4 view from the north, looking south over
+         the dining hall toward the kitchen. Drag with the mouse to orbit. -->
+    <gui>
+      <camera name="user_camera">
+        <pose>1.0 1.5 17.0 0 1.45 1.5708</pose>
+      </camera>
+    </gui>
+
+    <!-- Publishes /model_states (gazebo_msgs/ModelStates) at 30 Hz so the
+         robot can read its true pose directly from the simulator, bypassing
+         TF2/odom drift entirely. Used by test_nav.py and test_pipeline.py. -->
+    <plugin name="gazebo_ros_state" filename="libgazebo_ros_state.so">
+      <update_rate>30.0</update_rate>
+    </plugin>
+
+    <!-- ── Room walls ────────────────────────────────────────────────── -->
+    <!-- South wall  y = -6 -->
+    <model name="wall_south">
+      <pose>1 -6 1 0 0 0</pose>
+      <static>true</static>
+      <link name="link">
+        <collision name="col"><geometry><box><size>14 0.2 2</size></box></geometry></collision>
+        <visual name="vis"><geometry><box><size>14 0.2 2</size></box></geometry>
+          <material><ambient>0.8 0.8 0.8 1</ambient></material></visual>
+      </link>
+    </model>
+    <!-- North wall  y = 10 -->
+    <model name="wall_north">
+      <pose>1 10 1 0 0 0</pose>
+      <static>true</static>
+      <link name="link">
+        <collision name="col"><geometry><box><size>14 0.2 2</size></box></geometry></collision>
+        <visual name="vis"><geometry><box><size>14 0.2 2</size></box></geometry>
+          <material><ambient>0.8 0.8 0.8 1</ambient></material></visual>
+      </link>
+    </model>
+    <!-- West wall  x = -6 -->
+    <model name="wall_west">
+      <pose>-6 2 1 0 0 1.5708</pose>
+      <static>true</static>
+      <link name="link">
+        <collision name="col"><geometry><box><size>16 0.2 2</size></box></geometry></collision>
+        <visual name="vis"><geometry><box><size>16 0.2 2</size></box></geometry>
+          <material><ambient>0.8 0.8 0.8 1</ambient></material></visual>
+      </link>
+    </model>
+    <!-- East wall  x = 8 -->
+    <model name="wall_east">
+      <pose>8 2 1 0 0 1.5708</pose>
+      <static>true</static>
+      <link name="link">
+        <collision name="col"><geometry><box><size>16 0.2 2</size></box></geometry></collision>
+        <visual name="vis"><geometry><box><size>16 0.2 2</size></box></geometry>
+          <material><ambient>0.8 0.8 0.8 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <!-- The internal partition wall (kitchen/dining split at y = -1.6 with a
+         doorway) was REMOVED: the ground-truth navigation drives straight
+         lines with no obstacle avoidance, and the exploration patrol +
+         serve trips kept clipping it. The room is now one open space; only
+         the outer walls remain. -->
+
+    <!-- ── Bathroom (mock) in the NW corner ──────────────────────────────
+         Small room boxed by the existing west (x=-6) and north (y=10) outer
+         walls plus two new partitions: a south wall at y=8.6 with a 0.8 m
+         doorway centred at x=-5.0 (segments x[-6..-5.4] and x[-4.6..-4.4])
+         and an east wall at x=-4.4. A brown door panel stands ajar in the
+         opening and a white "toilet" is visible through it. The doorway is
+         what BATHROOM_DOOR in hri_bridge.py points at (-5.0, 8.6); the
+         exploration viewpoint (-4.4, 7.8) and the west corridor stay clear
+         of the new walls (everything is at y >= 8.6). -->
+    <model name="bathroom_wall_south_w">
+      <pose>-5.7 8.6 1 0 0 0</pose>
+      <static>true</static>
+      <link name="link">
+        <collision name="col"><geometry><box><size>0.6 0.2 2</size></box></geometry></collision>
+        <visual name="vis"><geometry><box><size>0.6 0.2 2</size></box></geometry>
+          <material><ambient>0.8 0.8 0.8 1</ambient></material></visual>
+      </link>
+    </model>
+    <model name="bathroom_wall_south_e">
+      <pose>-4.5 8.6 1 0 0 0</pose>
+      <static>true</static>
+      <link name="link">
+        <collision name="col"><geometry><box><size>0.2 0.2 2</size></box></geometry></collision>
+        <visual name="vis"><geometry><box><size>0.2 0.2 2</size></box></geometry>
+          <material><ambient>0.8 0.8 0.8 1</ambient></material></visual>
+      </link>
+    </model>
+    <model name="bathroom_wall_east">
+      <pose>-4.4 9.3 1 0 0 0</pose>
+      <static>true</static>
+      <link name="link">
+        <collision name="col"><geometry><box><size>0.2 1.4 2</size></box></geometry></collision>
+        <visual name="vis"><geometry><box><size>0.2 1.4 2</size></box></geometry>
+          <material><ambient>0.8 0.8 0.8 1</ambient></material></visual>
+      </link>
+    </model>
+    <!-- Door panel: hinged at the west jamb (-5.4, 8.6), open ~35° inward -->
+    <model name="bathroom_door">
+      <pose>-5.07 8.83 1 0 0 0.6</pose>
+      <static>true</static>
+      <link name="link">
+        <collision name="col"><geometry><box><size>0.8 0.06 2</size></box></geometry></collision>
+        <visual name="vis"><geometry><box><size>0.8 0.06 2</size></box></geometry>
+          <!-- DESATURATED brown: the HSV bottle detector keys on saturation
+               (S>=80); a saturated brown door reads as an "orange bottle".
+               Keep S below ~40 so the door stays invisible to the detector. -->
+          <material><ambient>0.30 0.28 0.26 1</ambient>
+                    <diffuse>0.38 0.35 0.32 1</diffuse></material></visual>
+      </link>
+    </model>
+    <!-- White "toilet" in the corner, visible through the doorway -->
+    <model name="bathroom_toilet">
+      <pose>-5.65 9.6 0.2 0 0 0</pose>
+      <static>true</static>
+      <link name="link">
+        <collision name="col"><geometry><cylinder><radius>0.18</radius><length>0.4</length></cylinder></geometry></collision>
+        <visual name="vis"><geometry><cylinder><radius>0.18</radius><length>0.4</length></cylinder></geometry>
+          <material><ambient>0.9 0.9 0.9 1</ambient>
+                    <diffuse>0.95 0.95 0.95 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <!-- ── Reception in the SE corner ────────────────────────────────────
+         Front desk where a human colleague checks IDs (TIAGo redirects
+         age-restricted requests here — see handle_alcohol_request in
+         waiter.py). Desk faces north; a white bell sits on top and a light
+         sign board hangs on the south wall behind it. All DESATURATED
+         colors so the HSV bottle detector never fires on it. The patrol
+         passes it (RECEPTION_DESK in hri_bridge.py) so the robot learns
+         where it is by SEEING it, like the bathroom. -->
+    <model name="reception_desk">
+      <pose>6.9 -5.3 0.525 0 0 0</pose>
+      <static>true</static>
+      <link name="link">
+        <collision name="col"><geometry><box><size>1.8 0.6 1.05</size></box></geometry></collision>
+        <visual name="vis"><geometry><box><size>1.8 0.6 1.05</size></box></geometry>
+          <material><ambient>0.30 0.28 0.26 1</ambient>
+                    <diffuse>0.40 0.36 0.32 1</diffuse></material></visual>
+      </link>
+    </model>
+    <model name="reception_bell">
+      <pose>6.25 -5.2 1.1 0 0 0</pose>
+      <static>true</static>
+      <link name="link">
+        <visual name="vis"><geometry><cylinder><radius>0.05</radius><length>0.06</length></cylinder></geometry>
+          <material><ambient>0.85 0.85 0.85 1</ambient>
+                    <diffuse>0.92 0.92 0.92 1</diffuse></material></visual>
+      </link>
+    </model>
+    <model name="reception_sign">
+      <pose>6.9 -5.88 1.7 0 0 0</pose>
+      <static>true</static>
+      <link name="link">
+        <visual name="vis"><geometry><box><size>1.2 0.05 0.35</size></box></geometry>
+          <material><ambient>0.75 0.75 0.78 1</ambient>
+                    <diffuse>0.85 0.85 0.88 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <!-- Bar counter / bancone (where the robot picks up the drink).
+         5 m-long bar in TWO parts: a wooden BODY + a dark stone TOP slab that
+         overhangs the front and sides (classic bar look). The stone top is at
+         z ~= 0.71 (≈ the old single counter) and the bottle stays at (2.0,-3.2,
+         0.80), so the grasp (GRASP_ARM / GRASP_TORSO in grasp_test.py) is
+         UNCHANGED. DO NOT raise the top without re-tuning the grasp.
+         The body is named "kitchen_table" so scene_graph_node.py /
+         scene_config.yaml still match. -->
+    <model name="kitchen_table">
+      <static>true</static>
+      <pose>2.0 -3.4 0.33 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>5.0 0.7 0.66</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>5.0 0.7 0.66</size></box>
+          </geometry>
+          <!-- DESATURATED wood: Gazebo/Wood is a saturated orange-brown that
+               the HSV bottle detector (keyed on saturation) reads as blobs of
+               "orange bottles" all over the counter. Low-sat warm brown keeps
+               the furniture look but stays invisible to the detector. -->
+          <material><ambient>0.30 0.28 0.26 1</ambient>
+                    <diffuse>0.40 0.36 0.32 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <!-- Wooden countertop slab on top of the bar body (overhangs front+sides). -->
+    <model name="bar_counter_top">
+      <static>true</static>
+      <pose>2.0 -3.43 0.685 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>5.2 0.84 0.05</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>5.2 0.84 0.05</size></box></geometry>
+          <!-- DESATURATED wood: Gazebo/Wood is a saturated orange-brown that
+               the HSV bottle detector (keyed on saturation) reads as blobs of
+               "orange bottles" all over the counter. Low-sat warm brown keeps
+               the furniture look but stays invisible to the detector. -->
+          <material><ambient>0.30 0.28 0.26 1</ambient>
+                    <diffuse>0.40 0.36 0.32 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── Kitchen furnishings (realistic mesh models from pal_gazebo_worlds) ──
+         Real furniture meshes lined up against the SOUTH wall (back of the
+         kitchen). All static and well south of the robot's work area (it
+         operates at y >= -2.7), so they never interfere with navigation or the
+         grasp. The ONLY thing on the working bar counter is the sprite_bottle.
+         Mesh origins are at a corner, so each model extends +x/+y from its pose;
+         placed with the back near the wall (y = -5.9). -->
+
+    <!-- Fridge (built from primitives — looks like a steel fridge with a
+         freezer split and two handles) in the SW corner. Front faces +y (north,
+         into the kitchen). No local/online fridge mesh was reliable in Gazebo
+         Classic, so it is modelled here. -->
+    <model name="kitchen_fridge">
+      <static>true</static>
+      <pose>-4.3 -5.55 0 0 0 0</pose>
+      <link name="link">
+        <collision name="body"><pose>0 0 0.9 0 0 0</pose><geometry><box><size>0.7 0.7 1.8</size></box></geometry></collision>
+        <visual name="body"><pose>0 0 0.9 0 0 0</pose>
+          <geometry><box><size>0.7 0.7 1.8</size></box></geometry>
+          <material><ambient>0.82 0.84 0.86 1</ambient><diffuse>0.9 0.91 0.93 1</diffuse><specular>0.5 0.5 0.5 1</specular></material></visual>
+        <!-- freezer / fridge door split line -->
+        <visual name="split"><pose>0 0.351 1.25 0 0 0</pose>
+          <geometry><box><size>0.7 0.02 0.025</size></box></geometry>
+          <material><ambient>0.15 0.15 0.15 1</ambient></material></visual>
+        <!-- handles (vertical, on the door fronts) -->
+        <visual name="handle_top"><pose>-0.28 0.37 1.5 0 0 0</pose>
+          <geometry><box><size>0.035 0.05 0.35</size></box></geometry>
+          <material><ambient>0.08 0.08 0.08 1</ambient></material></visual>
+        <visual name="handle_bottom"><pose>-0.28 0.37 0.75 0 0 0</pose>
+          <geometry><box><size>0.035 0.05 0.55</size></box></geometry>
+          <material><ambient>0.08 0.08 0.08 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <!-- Black back counter: one clean, aligned box spanning the wall under the
+         shelves (replaces the mesh sideboards, which left gaps). Top = 0.61 so
+         the drinks/snacks on top keep their height. -->
+    <model name="kitchen_back_counter">
+      <static>true</static>
+      <pose>-0.55 -5.68 0.305 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>6.5 0.44 0.61</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>6.5 0.44 0.61</size></box></geometry>
+          <material><ambient>0.02 0.02 0.02 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse><specular>0.12 0.12 0.12 1</specular></material></visual>
+      </link>
+    </model>
+
+    <!-- Vertical open shelf cabinet (étagère) at the east end, where the bushy
+         plant was. Two side panels + 5 horizontal shelves, dark wood. -->
+    <model name="kitchen_shelf_cabinet">
+      <static>true</static>
+      <pose>3.3 -5.72 0 0 0 0</pose>
+      <link name="link">
+        <!-- side panels -->
+        <visual name="sideL"><pose>-0.36 0 0.75 0 0 0</pose><geometry><box><size>0.03 0.34 1.5</size></box></geometry>
+          <material><ambient>0.14 0.1 0.06 1</ambient><diffuse>0.24 0.16 0.1 1</diffuse></material></visual>
+        <visual name="sideR"><pose>0.36 0 0.75 0 0 0</pose><geometry><box><size>0.03 0.34 1.5</size></box></geometry>
+          <material><ambient>0.14 0.1 0.06 1</ambient><diffuse>0.24 0.16 0.1 1</diffuse></material></visual>
+        <!-- back panel -->
+        <visual name="back"><pose>0 -0.16 0.75 0 0 0</pose><geometry><box><size>0.75 0.02 1.5</size></box></geometry>
+          <material><ambient>0.1 0.07 0.04 1</ambient><diffuse>0.18 0.12 0.07 1</diffuse></material></visual>
+        <!-- horizontal shelves -->
+        <visual name="sh1"><pose>0 0 0.10 0 0 0</pose><geometry><box><size>0.75 0.34 0.025</size></box></geometry><material><ambient>0.14 0.1 0.06 1</ambient><diffuse>0.24 0.16 0.1 1</diffuse></material></visual>
+        <visual name="sh2"><pose>0 0 0.45 0 0 0</pose><geometry><box><size>0.75 0.34 0.025</size></box></geometry><material><ambient>0.14 0.1 0.06 1</ambient><diffuse>0.24 0.16 0.1 1</diffuse></material></visual>
+        <visual name="sh3"><pose>0 0 0.80 0 0 0</pose><geometry><box><size>0.75 0.34 0.025</size></box></geometry><material><ambient>0.14 0.1 0.06 1</ambient><diffuse>0.24 0.16 0.1 1</diffuse></material></visual>
+        <visual name="sh4"><pose>0 0 1.15 0 0 0</pose><geometry><box><size>0.75 0.34 0.025</size></box></geometry><material><ambient>0.14 0.1 0.06 1</ambient><diffuse>0.24 0.16 0.1 1</diffuse></material></visual>
+        <visual name="sh5"><pose>0 0 1.50 0 0 0</pose><geometry><box><size>0.75 0.34 0.025</size></box></geometry><material><ambient>0.14 0.1 0.06 1</ambient><diffuse>0.24 0.16 0.1 1</diffuse></material></visual>
+        <collision name="c"><pose>0 0 0.75 0 0 0</pose><geometry><box><size>0.75 0.34 1.5</size></box></geometry></collision>
+      </link>
+    </model>
+
+
+    <!-- Drinks + snacks ON the sideboards. Sideboard top = 0.61 and the can
+         models have their origin at the BASE, so they sit at z = 0.61 (placing
+         them higher made them float). -->
+    <include><name>display_coke</name><uri>model://cocacola</uri><pose>-3.0 -5.7 0.61 0 0 0</pose><static>true</static></include>
+    <include><name>display_sprite</name><uri>model://sprite</uri><pose>-2.6 -5.7 0.61 0 0 0</pose><static>true</static></include>
+    <!-- bifrutas / pringles / biscuits have CENTRE origin, so they must be
+         raised by half their height to sit on the 0.61 top (cocacola/sprite
+         have base origin and stay at 0.61). -->
+    <include><name>display_juice</name><uri>model://bifrutas_tropical_can</uri><pose>-2.0 -5.7 0.676 0 0 0</pose><static>true</static></include>
+    <include><name>display_coke2</name><uri>model://cocacola</uri><pose>1.0 -5.7 0.61 0 0 0</pose><static>true</static></include>
+    <include><name>display_pringles</name><uri>model://pringles</uri><pose>-1.2 -5.7 0.728 0 0 0</pose><static>true</static></include>
+
+    <!-- Bottiglie a parete: due scaffali realistici (mesh bar_bottles) IN FILA
+         sulla parete sud, al posto delle vecchie mensole + cilindri poligonali.
+         rpy=1.5708 0 1.5708: mesh Y-up -> altezza su Z (~1.3m), larghezza (~1.67m)
+         lungo il muro (X), profondita sottile (~0.29m) su Y. -->
+    <include>
+      <name>bar_bottles_1</name>
+      <uri>model://bar_bottles</uri>
+      <pose>-0.77 -5.75 0.67 1.5708 0 1.5708</pose>
+    </include>
+    <include>
+      <name>bar_bottles_2</name>
+      <uri>model://bar_bottles</uri>
+      <pose>0.90 -5.75 0.67 1.5708 0 1.5708</pose>
+    </include>
+    <include>
+      <name>bar_bottles_3</name>
+      <uri>model://bar_bottles</uri>
+      <pose>2.57 -5.75 0.67 1.5708 0 1.5708</pose>
+    </include>
+
+    <!-- Angolo salotto: due poltrone rosse (Black Lodge) nell'angolo NW, fuori
+         dai percorsi del robot (serve i tavoli ovest da x=-0.65). -->
+    <include>
+      <name>lodge_sofa</name>
+      <uri>model://lodge_sofa</uri>
+      <pose>-5.3 0.4 0.02 0 0 1.5708</pose>
+    </include>
+
+    <!-- Sprite bottle (coke_can_slim used as stand-in) resting on the table's
+         north edge (2.0, -3.2), within TIAGo's reach from the north. -->
+    <include>
+      <name>sprite_bottle</name>
+      <uri>model://sprite</uri>
+      <pose>2.0 -3.2 0.80 0 0 0</pose>
+    </include>
+
+    <!-- Extra graspable drinks at DISTINCT spots along the counter, so TIAGo
+         navigates to a different grasp base per drink (see hri_bridge.py
+         BOTTLE_HOME / grasp_base_for). Counter spans x[-0.5..4.5] at y=-3.2. -->
+    <include>
+      <name>coke_bottle</name>
+      <uri>model://cocacola</uri>
+      <pose>2.5 -3.2 0.80 0 0 0</pose>
+    </include>
+    <!-- Water bottle. It first used model://bifrutas_tropical_can — the SAME
+         orange fruit can as juice_bottle — so the counter held two identical
+         orange cans and the vision model could not possibly call one "water":
+         menu.yaml describes it as "a plain pale, transparent or bluish
+         container with no strong branding". Every scan came back with juice
+         but never water.
+         model://water_bottle is a LOCAL model in exchange/gazebo_models, built
+         the same way pal_gazebo_worlds builds sprite and cocacola: a textured
+         cylinder, not a mesh — those are not meshes either, just a cylinder
+         with a JPG wrapped on it by an Ogre material script. Same radius and
+         height as sprite (0.04 / 0.15), so the tuned grasp is unchanged. -->
+    <include>
+      <name>water_bottle</name>
+      <uri>model://water_bottle</uri>
+      <pose>1.5 -3.2 0.80 0 0 0</pose>
+    </include>
+
+    <!-- Wine bottle (burgundy glass) on the working counter — the ONE alcoholic
+         drink the bar stocks (served to ADULTS only; minors are refused). Built
+         from primitives (no wine mesh available): dark-red body + thin neck.
+         Base-origin, so it sits on the counter top (z=0.71). Remove this model
+         from the world and the camera scan will report wine as out of stock. -->
+    <model name="wine_bottle">
+      <static>true</static>
+      <pose>3.0 -3.2 0.71 0 0 0</pose>
+      <link name="l">
+        <visual name="b"><pose>0 0 0.11 0 0 0</pose><geometry><cylinder><radius>0.045</radius><length>0.22</length></cylinder></geometry>
+          <material><ambient>0.20 0.02 0.06 1</ambient><diffuse>0.34 0.04 0.10 1</diffuse><specular>0.2 0.05 0.08 1</specular></material></visual>
+        <visual name="n"><pose>0 0 0.30 0 0 0</pose><geometry><cylinder><radius>0.014</radius><length>0.14</length></cylinder></geometry>
+          <material><ambient>0.20 0.02 0.06 1</ambient><diffuse>0.34 0.04 0.10 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <!-- ── Second counter (WEST) — a genuinely different counter TIAGo drives to
+         (centre x=-1.8, in the open reachable area; gap from the bar counter
+         which ends at x=-0.5). Same height as the bar counter so the tuned
+         grasp works. Holds more graspable items. -->
+    <model name="side_counter">
+      <static>true</static>
+      <pose>-1.8 -3.4 0.33 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>1.4 0.7 0.66</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>1.4 0.7 0.66</size></box></geometry>
+          <material><ambient>0.30 0.28 0.26 1</ambient><diffuse>0.40 0.36 0.32 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name="side_counter_top">
+      <static>true</static>
+      <pose>-1.8 -3.43 0.685 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>1.6 0.84 0.05</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>1.6 0.84 0.05</size></box></geometry>
+          <material><ambient>0.30 0.28 0.26 1</ambient><diffuse>0.40 0.36 0.32 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Graspable items on the WEST counter. -->
+    <include>
+      <name>juice_bottle</name>
+      <uri>model://bifrutas_tropical_can</uri>
+      <pose>-2.1 -3.2 0.80 0 0 0</pose>
+    </include>
+    <include>
+      <name>pringles_can</name>
+      <uri>model://pringles</uri>
+      <pose>-1.5 -3.2 0.80 0 0 0</pose>
+    </include>
+
+    <!-- ── Customers (dining / lounge area) ─────────────────────────── -->
+    <include>
+      <name>male03</name>
+      <uri>model://citizen_extras_male_03</uri>
+      <pose>4.40 2.35 0 0 0 1.5708</pose>
+      <static>true</static>
+    </include>
+
+    <include>
+      <!-- Cliente minorenne (tavolo 2): modello di BAMBINO reale
+           (OpenRobotics "VisitorKidSit", Fuel, CC-BY 4.0) al posto
+           dell'avatar adulto, così si VEDE che è un bambino — coerente
+           con MINOR_ENTITIES in waiter.py (logica alcol/minorenni). -->
+      <name>female02</name>
+      <uri>model://VisitorKidSit</uri>
+      <pose>-1.60 2.35 0 0 0 1.5708</pose>
+      <static>true</static>
+    </include>
+
+    <include>
+      <name>female03</name>
+      <uri>model://citizen_extras_female_03</uri>
+      <pose>-1.60 6.85 0 0 0 1.5708</pose>
+      <static>true</static>
+    </include>
+
+    <include>
+      <name>female02bis</name>
+      <uri>model://citizen_extras_female_02</uri>
+      <pose>4.40 6.85 0 0 0 1.5708</pose>
+      <static>true</static>
+    </include>
+
+    <!-- ── Furniture ─────────────────────────────────────────────────── -->
+    <include>
+      <name>dining_table_1</name>
+      <uri>model://bar_table</uri>
+      <pose>4.0 2.5 0 0 0 0</pose>
+      <static>true</static>
+    </include>
+
+    <include>
+      <name>dining_table_2</name>
+      <uri>model://bar_table</uri>
+      <pose>-2.0 2.5 0 0 0 0</pose>
+      <static>true</static>
+    </include>
+
+    <include>
+      <name>dining_table_3</name>
+      <uri>model://bar_table</uri>
+      <pose>-2.0 7.0 0 0 0 0</pose>
+      <static>true</static>
+    </include>
+
+    <include>
+      <name>dining_table_4</name>
+      <uri>model://bar_table</uri>
+      <pose>4.0 7.0 0 0 0 0</pose>
+      <static>true</static>
+    </include>
+
+    <!-- ── Chairs (2 per table), dark-brown primitives so the colour is fully
+         controlled. Origin at the seat centre; the backrest is at -Y, so a chair
+         faces +Y at yaw=0 (yaw rotates it to face its table). For dining_table_1
+         (served by the robot) the chairs sit EAST/NORTH, clear of the west approach.
+         chair_1a/chair_4a (south chairs of tables 1 & 4) are shifted ~0.5m east of
+         the table's x: the ground-truth nav has no obstacle avoidance and drives a
+         STRAIGHT line from each table's serve point back to the counter before
+         heading to the next table (see TABLES/serve in waiter.py) — at the tables'
+         original x=4.0 that return line passed within 4-17 cm of these two chairs.
+         Shifting east opens ~0.67 m clearance so the robot no longer clips them. -->
+    <model name="chair_1a"><static>true</static><pose>4.40 2.20 0 0 0 0</pose><link name="l">
+      <visual name="s"><pose>0 0 0.44 0 0 0</pose><geometry><box><size>0.42 0.42 0.05</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="b"><pose>0 -0.19 0.66 0 0 0</pose><geometry><box><size>0.42 0.04 0.44</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="base"><pose>0 0 0.21 0 0 0</pose><geometry><box><size>0.34 0.34 0.42</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual></link></model>
+    <model name="chair_1b"><static>true</static><pose>4.40 4.30 0 0 0 3.14159</pose><link name="l">
+      <visual name="s"><pose>0 0 0.44 0 0 0</pose><geometry><box><size>0.42 0.42 0.05</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="b"><pose>0 -0.19 0.66 0 0 0</pose><geometry><box><size>0.42 0.04 0.44</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="base"><pose>0 0 0.21 0 0 0</pose><geometry><box><size>0.34 0.34 0.42</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual></link></model>
+    <model name="chair_2a"><static>true</static><pose>-1.60 2.20 0 0 0 0</pose><link name="l">
+      <visual name="s"><pose>0 0 0.44 0 0 0</pose><geometry><box><size>0.42 0.42 0.05</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="b"><pose>0 -0.19 0.66 0 0 0</pose><geometry><box><size>0.42 0.04 0.44</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="base"><pose>0 0 0.21 0 0 0</pose><geometry><box><size>0.34 0.34 0.42</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual></link></model>
+    <model name="chair_2b"><static>true</static><pose>-1.60 4.30 0 0 0 3.14159</pose><link name="l">
+      <visual name="s"><pose>0 0 0.44 0 0 0</pose><geometry><box><size>0.42 0.42 0.05</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="b"><pose>0 -0.19 0.66 0 0 0</pose><geometry><box><size>0.42 0.04 0.44</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="base"><pose>0 0 0.21 0 0 0</pose><geometry><box><size>0.34 0.34 0.42</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual></link></model>
+    <model name="chair_3a"><static>true</static><pose>-1.60 6.70 0 0 0 0</pose><link name="l">
+      <visual name="s"><pose>0 0 0.44 0 0 0</pose><geometry><box><size>0.42 0.42 0.05</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="b"><pose>0 -0.19 0.66 0 0 0</pose><geometry><box><size>0.42 0.04 0.44</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="base"><pose>0 0 0.21 0 0 0</pose><geometry><box><size>0.34 0.34 0.42</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual></link></model>
+    <model name="chair_3b"><static>true</static><pose>-1.60 8.80 0 0 0 3.14159</pose><link name="l">
+      <visual name="s"><pose>0 0 0.44 0 0 0</pose><geometry><box><size>0.42 0.42 0.05</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="b"><pose>0 -0.19 0.66 0 0 0</pose><geometry><box><size>0.42 0.04 0.44</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="base"><pose>0 0 0.21 0 0 0</pose><geometry><box><size>0.34 0.34 0.42</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual></link></model>
+    <model name="chair_4a"><static>true</static><pose>4.40 6.70 0 0 0 0</pose><link name="l">
+      <visual name="s"><pose>0 0 0.44 0 0 0</pose><geometry><box><size>0.42 0.42 0.05</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="b"><pose>0 -0.19 0.66 0 0 0</pose><geometry><box><size>0.42 0.04 0.44</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="base"><pose>0 0 0.21 0 0 0</pose><geometry><box><size>0.34 0.34 0.42</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual></link></model>
+    <model name="chair_4b"><static>true</static><pose>4.40 8.80 0 0 0 3.14159</pose><link name="l">
+      <visual name="s"><pose>0 0 0.44 0 0 0</pose><geometry><box><size>0.42 0.42 0.05</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="b"><pose>0 -0.19 0.66 0 0 0</pose><geometry><box><size>0.42 0.04 0.44</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual>
+      <visual name="base"><pose>0 0 0.21 0 0 0</pose><geometry><box><size>0.34 0.34 0.42</size></box></geometry><material><ambient>0.34 0.28 0.20 1</ambient><diffuse>0.54 0.44 0.32 1</diffuse></material></visual></link></model>
+
+
+    <!-- Floor-draping tablecloths + small warm table lamps on each dining table,
+         for atmosphere (replaces the removed bar-counter pendants). Desaturated
+         cloth + emissive lamp shade => detector-safe. Lamps at a back corner so
+         the table centre stays clear for serving. No collision. -->
+    <model name="lamp_t1"><static>true</static><pose>4.40 3.25 0.72 0 0 0</pose><link name="l"><visual name="base"><pose>0 0 0.03 0 0 0</pose><geometry><cylinder><radius>0.045</radius><length>0.06</length></cylinder></geometry><material><ambient>0.10 0.08 0.05 1</ambient><diffuse>0.18 0.14 0.09 1</diffuse></material></visual><visual name="stem"><pose>0 0 0.11 0 0 0</pose><geometry><cylinder><radius>0.008</radius><length>0.10</length></cylinder></geometry><material><ambient>0.10 0.08 0.05 1</ambient></material></visual><visual name="shade"><pose>0 0 0.19 0 0 0</pose><geometry><cylinder><radius>0.075</radius><length>0.09</length></cylinder></geometry><material><ambient>0.55 0.45 0.28 1</ambient><diffuse>0.80 0.66 0.40 1</diffuse><emissive>0.85 0.70 0.42 1</emissive></material></visual></link></model>
+    <model name="lamp_t2"><static>true</static><pose>-1.60 3.25 0.72 0 0 0</pose><link name="l"><visual name="base"><pose>0 0 0.03 0 0 0</pose><geometry><cylinder><radius>0.045</radius><length>0.06</length></cylinder></geometry><material><ambient>0.10 0.08 0.05 1</ambient><diffuse>0.18 0.14 0.09 1</diffuse></material></visual><visual name="stem"><pose>0 0 0.11 0 0 0</pose><geometry><cylinder><radius>0.008</radius><length>0.10</length></cylinder></geometry><material><ambient>0.10 0.08 0.05 1</ambient></material></visual><visual name="shade"><pose>0 0 0.19 0 0 0</pose><geometry><cylinder><radius>0.075</radius><length>0.09</length></cylinder></geometry><material><ambient>0.55 0.45 0.28 1</ambient><diffuse>0.80 0.66 0.40 1</diffuse><emissive>0.85 0.70 0.42 1</emissive></material></visual></link></model>
+    <model name="lamp_t3"><static>true</static><pose>-1.60 7.75 0.72 0 0 0</pose><link name="l"><visual name="base"><pose>0 0 0.03 0 0 0</pose><geometry><cylinder><radius>0.045</radius><length>0.06</length></cylinder></geometry><material><ambient>0.10 0.08 0.05 1</ambient><diffuse>0.18 0.14 0.09 1</diffuse></material></visual><visual name="stem"><pose>0 0 0.11 0 0 0</pose><geometry><cylinder><radius>0.008</radius><length>0.10</length></cylinder></geometry><material><ambient>0.10 0.08 0.05 1</ambient></material></visual><visual name="shade"><pose>0 0 0.19 0 0 0</pose><geometry><cylinder><radius>0.075</radius><length>0.09</length></cylinder></geometry><material><ambient>0.55 0.45 0.28 1</ambient><diffuse>0.80 0.66 0.40 1</diffuse><emissive>0.85 0.70 0.42 1</emissive></material></visual></link></model>
+    <model name="lamp_t4"><static>true</static><pose>4.40 7.75 0.72 0 0 0</pose><link name="l"><visual name="base"><pose>0 0 0.03 0 0 0</pose><geometry><cylinder><radius>0.045</radius><length>0.06</length></cylinder></geometry><material><ambient>0.10 0.08 0.05 1</ambient><diffuse>0.18 0.14 0.09 1</diffuse></material></visual><visual name="stem"><pose>0 0 0.11 0 0 0</pose><geometry><cylinder><radius>0.008</radius><length>0.10</length></cylinder></geometry><material><ambient>0.10 0.08 0.05 1</ambient></material></visual><visual name="shade"><pose>0 0 0.19 0 0 0</pose><geometry><cylinder><radius>0.075</radius><length>0.09</length></cylinder></geometry><material><ambient>0.55 0.45 0.28 1</ambient><diffuse>0.80 0.66 0.40 1</diffuse><emissive>0.85 0.70 0.42 1</emissive></material></visual></link></model>
+
+    <!-- "RECEPTION" sign on the reception board in the SE corner, above the desk. -->
+    <model name="reception_word"><static>true</static><pose>0 0 0 0 0 0</pose><link name="l">
+      <visual name="r0_0"><pose>7.4170 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.018 0.02 0.170</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r0_1"><pose>7.3720 -5.840 1.7760 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r0_2"><pose>7.3720 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r0_3"><pose>7.3360 -5.840 1.7425 0 0.0000 0</pose><geometry><box><size>0.018 0.02 0.085</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r0_4"><pose>7.3558 -5.840 1.6575 0 0.6028 0</pose><geometry><box><size>0.018 0.02 0.105</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r1_0"><pose>7.2990 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.018 0.02 0.170</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r1_1"><pose>7.2540 -5.840 1.7760 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r1_2"><pose>7.2540 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r1_3"><pose>7.2540 -5.840 1.6240 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r2_0"><pose>7.1810 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.018 0.02 0.170</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r2_1"><pose>7.1360 -5.840 1.7760 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r2_2"><pose>7.1360 -5.840 1.6240 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r3_0"><pose>7.0630 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.018 0.02 0.170</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r3_1"><pose>7.0180 -5.840 1.7760 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r3_2"><pose>7.0180 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r3_3"><pose>7.0180 -5.840 1.6240 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r4_0"><pose>6.9450 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.018 0.02 0.170</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r4_1"><pose>6.9000 -5.840 1.7760 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r4_2"><pose>6.9000 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r4_3"><pose>6.8640 -5.840 1.7425 0 0.0000 0</pose><geometry><box><size>0.018 0.02 0.085</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r5_0"><pose>6.7820 -5.840 1.7760 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r5_1"><pose>6.7820 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.018 0.02 0.170</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r6_0"><pose>6.6640 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.018 0.02 0.170</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r7_0"><pose>6.5910 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.018 0.02 0.170</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r7_1"><pose>6.5010 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.018 0.02 0.170</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r7_2"><pose>6.5460 -5.840 1.7760 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r7_3"><pose>6.5460 -5.840 1.6240 0 0.0000 0</pose><geometry><box><size>0.090 0.02 0.018</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r8_0"><pose>6.4730 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.018 0.02 0.170</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r8_1"><pose>6.3830 -5.840 1.7000 0 0.0000 0</pose><geometry><box><size>0.018 0.02 0.170</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="r8_2"><pose>6.4280 -5.840 1.7000 0 0.4869 0</pose><geometry><box><size>0.018 0.02 0.189</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+    </link></model>
+    <!-- "BAR" sign on the FRONT face of the bar counter, facing the room. -->
+    <model name="bar_sign"><static>true</static><pose>0 0 0 0 0 0</pose><link name="l">
+      <visual name="b0_0"><pose>2.3100 -3.040 0.3600 0 0.0000 0</pose><geometry><box><size>0.028 0.02 0.320</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="b0_1"><pose>2.2300 -3.040 0.5060 0 0.0000 0</pose><geometry><box><size>0.160 0.02 0.028</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="b0_2"><pose>2.2300 -3.040 0.3600 0 0.0000 0</pose><geometry><box><size>0.160 0.02 0.028</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="b0_3"><pose>2.2300 -3.040 0.2140 0 0.0000 0</pose><geometry><box><size>0.160 0.02 0.028</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="b0_4"><pose>2.1640 -3.040 0.4400 0 0.0000 0</pose><geometry><box><size>0.028 0.02 0.160</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="b0_5"><pose>2.1640 -3.040 0.2800 0 0.0000 0</pose><geometry><box><size>0.028 0.02 0.160</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="b1_0"><pose>2.0800 -3.040 0.3600 0 0.0000 0</pose><geometry><box><size>0.028 0.02 0.320</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="b1_1"><pose>1.9200 -3.040 0.3600 0 0.0000 0</pose><geometry><box><size>0.028 0.02 0.320</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="b1_2"><pose>2.0000 -3.040 0.5060 0 0.0000 0</pose><geometry><box><size>0.160 0.02 0.028</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="b1_3"><pose>2.0000 -3.040 0.3600 0 0.0000 0</pose><geometry><box><size>0.160 0.02 0.028</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="b2_0"><pose>1.8500 -3.040 0.3600 0 0.0000 0</pose><geometry><box><size>0.028 0.02 0.320</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="b2_1"><pose>1.7700 -3.040 0.5060 0 0.0000 0</pose><geometry><box><size>0.160 0.02 0.028</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="b2_2"><pose>1.7700 -3.040 0.3600 0 0.0000 0</pose><geometry><box><size>0.160 0.02 0.028</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="b2_3"><pose>1.7040 -3.040 0.4400 0 0.0000 0</pose><geometry><box><size>0.028 0.02 0.160</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="b2_4"><pose>1.7412 -3.040 0.2800 0 0.5764 0</pose><geometry><box><size>0.028 0.02 0.195</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+    </link></model>
+
+    <!-- "WC" sign beside the bathroom door (NW), facing the room. -->
+    <model name="toilet_sign"><static>true</static><pose>0 0 0 0 0 0</pose><link name="l">
+      <visual name="w0_0"><pose>-5.8335 8.490 1.4500 0 2.9917 0</pose><geometry><box><size>0.020 0.02 0.220</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="w0_1"><pose>-5.8043 8.490 1.4115 0 0.2321 0</pose><geometry><box><size>0.020 0.02 0.144</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="w0_2"><pose>-5.7757 8.490 1.4115 0 2.9095 0</pose><geometry><box><size>0.020 0.02 0.144</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="w0_3"><pose>-5.7465 8.490 1.4500 0 0.1499 0</pose><geometry><box><size>0.020 0.02 0.220</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="w1_0"><pose>-5.6750 8.490 1.4500 0 0.0000 0</pose><geometry><box><size>0.020 0.02 0.220</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="w1_1"><pose>-5.6100 8.490 1.5500 0 0.0000 0</pose><geometry><box><size>0.130 0.02 0.020</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+      <visual name="w1_2"><pose>-5.6100 8.490 1.3500 0 0.0000 0</pose><geometry><box><size>0.130 0.02 0.020</size></box></geometry><material><ambient>0.60 0.58 0.50 1</ambient><diffuse>0.97 0.95 0.85 1</diffuse><emissive>0.95 0.90 0.70 1</emissive></material></visual>
+    </link></model>
+    <!-- Cassa (registratore) sul bancone, costruita da primitivi (desaturata). -->
+    <model name="cash_register"><static>true</static><pose>7.05 -5.35 1.05 0 0 0</pose><link name="l">
+      <visual name="body"><pose>0 0 0.11 0 0 0</pose><geometry><box><size>0.30 0.34 0.22</size></box></geometry><material><ambient>0.14 0.14 0.16 1</ambient><diffuse>0.24 0.24 0.27 1</diffuse><specular>0.2 0.2 0.2 1</specular></material></visual>
+      <visual name="drawer"><pose>0 0.171 0.07 0 0 0</pose><geometry><box><size>0.30 0.01 0.06</size></box></geometry><material><ambient>0.05 0.05 0.06 1</ambient><diffuse>0.09 0.09 0.10 1</diffuse></material></visual>
+      <visual name="keypad"><pose>0 0.06 0.235 0.35 0 0</pose><geometry><box><size>0.24 0.16 0.02</size></box></geometry><material><ambient>0.22 0.22 0.24 1</ambient><diffuse>0.34 0.34 0.37 1</diffuse></material></visual>
+      <visual name="post"><pose>0 -0.10 0.30 0 0 0</pose><geometry><box><size>0.03 0.03 0.16</size></box></geometry><material><ambient>0.05 0.05 0.06 1</ambient><diffuse>0.09 0.09 0.10 1</diffuse></material></visual>
+      <visual name="screen"><pose>0 -0.085 0.40 0.25 0 0</pose><geometry><box><size>0.20 0.02 0.13</size></box></geometry><material><ambient>0.10 0.14 0.12 1</ambient><diffuse>0.16 0.24 0.20 1</diffuse><emissive>0.10 0.20 0.14 1</emissive></material></visual>
+    </link></model>
+    <!-- Single INDOOR potted plant next to the reception (ceramic pot +
+         slender leaf blades, not a tree). Green desaturated => detector-safe. -->
+    <model name="plant_reception"><static>true</static><pose>5.6 -5.4 0 0 0 0</pose><link name="l">
+      <visual name="pot"><pose>0 0 0.16 0 0 0</pose><geometry><cylinder><radius>0.15</radius><length>0.32</length></cylinder></geometry><material><ambient>0.50 0.48 0.44 1</ambient><diffuse>0.74 0.72 0.67 1</diffuse><specular>0.2 0.2 0.2 1</specular></material></visual>
+      <visual name="rim"><pose>0 0 0.32 0 0 0</pose><geometry><cylinder><radius>0.165</radius><length>0.04</length></cylinder></geometry><material><ambient>0.50 0.48 0.44 1</ambient><diffuse>0.74 0.72 0.67 1</diffuse><specular>0.2 0.2 0.2 1</specular></material></visual>
+      <visual name="soil"><pose>0 0 0.335 0 0 0</pose><geometry><cylinder><radius>0.145</radius><length>0.02</length></cylinder></geometry><material><ambient>0.10 0.08 0.06 1</ambient><diffuse>0.16 0.12 0.09 1</diffuse></material></visual>
+      <visual name="leaf0"><pose>0.070 0.000 0.56 0.550 0 0.000</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="leaf1"><pose>0.049 0.049 0.56 0.550 0 0.785</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="leaf2"><pose>0.000 0.070 0.56 0.550 0 1.571</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="leaf3"><pose>-0.049 0.049 0.56 0.550 0 2.356</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="leaf4"><pose>-0.070 0.000 0.56 0.550 0 3.142</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="leaf5"><pose>-0.049 -0.049 0.56 0.550 0 3.927</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="leaf6"><pose>-0.000 -0.070 0.56 0.550 0 4.712</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="leaf7"><pose>0.049 -0.049 0.56 0.550 0 5.498</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="lin0"><pose>0 0 0.60 0.2 0 0.400</pose><geometry><box><size>0.05 0.015 0.34</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="lin1"><pose>0 0 0.60 0.2 0 1.971</pose><geometry><box><size>0.05 0.015 0.34</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="lin2"><pose>0 0 0.60 0.2 0 3.542</pose><geometry><box><size>0.05 0.015 0.34</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="lin3"><pose>0 0 0.60 0.2 0 5.112</pose><geometry><box><size>0.05 0.015 0.34</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <collision name="c"><pose>0 0 0.4 0 0 0</pose><geometry><cylinder><radius>0.18</radius><length>0.8</length></cylinder></geometry></collision>
+    </link></model>
+    <!-- Framed pictures on the free walls (dark-wood frame + muted, low-
+         saturation canvas so the bottle detector ignores them). No collision. -->
+    <model name="pic_n1"><static>true</static><pose>0 0 0 0 0 0</pose><link name="l"><visual name="fr"><pose>-1.5 9.89 1.45 0 0 0</pose><geometry><box><size>0.66 0.03 0.51</size></box></geometry><material><ambient>0.14 0.10 0.06 1</ambient><diffuse>0.24 0.16 0.10 1</diffuse></material></visual><visual name="cv"><pose>-1.5 9.87 1.45 0 0 0</pose><geometry><box><size>0.60 0.02 0.45</size></box></geometry><material><ambient>0.21 0.27 0.35 1</ambient><diffuse>0.35 0.45 0.58 1</diffuse></material></visual></link></model>
+    <model name="pic_n2"><static>true</static><pose>0 0 0 0 0 0</pose><link name="l"><visual name="fr"><pose>3.5 9.89 1.45 0 0 0</pose><geometry><box><size>0.76 0.03 0.54</size></box></geometry><material><ambient>0.14 0.10 0.06 1</ambient><diffuse>0.24 0.16 0.10 1</diffuse></material></visual><visual name="cv"><pose>3.5 9.87 1.45 0 0 0</pose><geometry><box><size>0.70 0.02 0.48</size></box></geometry><material><ambient>0.37 0.31 0.20 1</ambient><diffuse>0.62 0.52 0.34 1</diffuse></material></visual></link></model>
+    <model name="pic_e1"><static>true</static><pose>0 0 0 0 0 0</pose><link name="l"><visual name="fr"><pose>7.89 3.5 1.45 0 0 0</pose><geometry><box><size>0.03 0.66 0.51</size></box></geometry><material><ambient>0.14 0.10 0.06 1</ambient><diffuse>0.24 0.16 0.10 1</diffuse></material></visual><visual name="cv"><pose>7.87 3.5 1.45 0 0 0</pose><geometry><box><size>0.02 0.60 0.45</size></box></geometry><material><ambient>0.24 0.30 0.23 1</ambient><diffuse>0.4 0.5 0.38 1</diffuse></material></visual></link></model>
+    <model name="pic_e2"><static>true</static><pose>0 0 0 0 0 0</pose><link name="l"><visual name="fr"><pose>7.89 6.5 1.45 0 0 0</pose><geometry><box><size>0.03 0.61 0.48</size></box></geometry><material><ambient>0.14 0.10 0.06 1</ambient><diffuse>0.24 0.16 0.10 1</diffuse></material></visual><visual name="cv"><pose>7.87 6.5 1.45 0 0 0</pose><geometry><box><size>0.02 0.55 0.42</size></box></geometry><material><ambient>0.28 0.25 0.31 1</ambient><diffuse>0.46 0.42 0.52 1</diffuse></material></visual></link></model>
+    <model name="pic_w1"><static>true</static><pose>0 0 0 0 0 0</pose><link name="l"><visual name="fr"><pose>-5.89 5.0 1.45 0 0 0</pose><geometry><box><size>0.03 0.72 0.52</size></box></geometry><material><ambient>0.14 0.10 0.06 1</ambient><diffuse>0.24 0.16 0.10 1</diffuse></material></visual><visual name="cv"><pose>-5.87 5.0 1.45 0 0 0</pose><geometry><box><size>0.02 0.66 0.46</size></box></geometry><material><ambient>0.36 0.25 0.22 1</ambient><diffuse>0.6 0.42 0.36 1</diffuse></material></visual></link></model>
+    <!-- Battiscopa scuro lungo le pareti interne (tocco realistico da bar). -->
+    <model name="skirting"><static>true</static><pose>0 0 0 0 0 0</pose><link name="l">
+      <visual name="s"><pose>1.0 -5.85 0.05 0 0 0</pose><geometry><box><size>13.8 0.05 0.10</size></box></geometry><material><ambient>0.28 0.22 0.16 1</ambient><diffuse>0.46 0.36 0.26 1</diffuse></material></visual>
+      <visual name="n"><pose>1.0 9.85 0.05 0 0 0</pose><geometry><box><size>13.8 0.05 0.10</size></box></geometry><material><ambient>0.28 0.22 0.16 1</ambient><diffuse>0.46 0.36 0.26 1</diffuse></material></visual>
+      <visual name="w"><pose>-5.85 2.0 0.05 0 0 0</pose><geometry><box><size>0.05 15.8 0.10</size></box></geometry><material><ambient>0.28 0.22 0.16 1</ambient><diffuse>0.46 0.36 0.26 1</diffuse></material></visual>
+      <visual name="e"><pose>7.85 2.0 0.05 0 0 0</pose><geometry><box><size>0.05 15.8 0.10</size></box></geometry><material><ambient>0.28 0.22 0.16 1</ambient><diffuse>0.46 0.36 0.26 1</diffuse></material></visual>
+    </link></model>
+    <!-- Piante da interno extra (vaso nero + foglie), angoli sala -->
+    <model name="plant_corner_ne"><static>true</static><pose>6.9 9.0 0 0 0 0</pose><link name="l">
+      <visual name="pot"><pose>0 0 0.16 0 0 0</pose><geometry><cylinder><radius>0.15</radius><length>0.32</length></cylinder></geometry><material><ambient>0.10 0.10 0.11 1</ambient><diffuse>0.16 0.16 0.17 1</diffuse><specular>0.2 0.2 0.2 1</specular></material></visual>
+      <visual name="rim"><pose>0 0 0.32 0 0 0</pose><geometry><cylinder><radius>0.165</radius><length>0.04</length></cylinder></geometry><material><ambient>0.10 0.10 0.11 1</ambient><diffuse>0.16 0.16 0.17 1</diffuse><specular>0.2 0.2 0.2 1</specular></material></visual>
+      <visual name="soil"><pose>0 0 0.335 0 0 0</pose><geometry><cylinder><radius>0.145</radius><length>0.02</length></cylinder></geometry><material><ambient>0.10 0.08 0.06 1</ambient><diffuse>0.16 0.12 0.09 1</diffuse></material></visual>
+      <visual name="leaf0"><pose>0.070 0.000 0.56 0.55 0 0.000</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="leaf1"><pose>0.049 0.049 0.56 0.55 0 0.785</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="leaf2"><pose>0.000 0.070 0.56 0.55 0 1.571</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="leaf3"><pose>-0.049 0.049 0.56 0.55 0 2.356</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="leaf4"><pose>-0.070 0.000 0.56 0.55 0 3.142</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="leaf5"><pose>-0.049 -0.049 0.56 0.55 0 3.927</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="leaf6"><pose>-0.000 -0.070 0.56 0.55 0 4.712</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="leaf7"><pose>0.049 -0.049 0.56 0.55 0 5.498</pose><geometry><box><size>0.06 0.015 0.40</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="lin0"><pose>0 0 0.60 0.2 0 0.400</pose><geometry><box><size>0.05 0.015 0.34</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="lin1"><pose>0 0 0.60 0.2 0 1.971</pose><geometry><box><size>0.05 0.015 0.34</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="lin2"><pose>0 0 0.60 0.2 0 3.542</pose><geometry><box><size>0.05 0.015 0.34</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <visual name="lin3"><pose>0 0 0.60 0.2 0 5.112</pose><geometry><box><size>0.05 0.015 0.34</size></box></geometry><material><ambient>0.14 0.22 0.12 1</ambient><diffuse>0.24 0.34 0.22 1</diffuse></material></visual>
+      <collision name="c"><pose>0 0 0.4 0 0 0</pose><geometry><cylinder><radius>0.18</radius><length>0.8</length></cylinder></geometry></collision>
+    </link></model>
+  </world>
+</sdf>

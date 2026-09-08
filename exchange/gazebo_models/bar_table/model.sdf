@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="bar_table">
+    <static>true</static>
+    <!-- Drop-in per kitchen_table: il CENTRO del tavolo resta in (0.4,0.75) nel
+         frame del modello (= dov'era il centro di kitchen_table), cosi' serve/dock
+         del robot, sedie e clienti restano validi. Mesh FBX Y-up (~cm): ruoto +90
+         su X (Y-up->Z-up), scalo UGUALE su X e Z (top CIRCOLARE, diam ~1.2 m) e
+         piu' basso su Y per l'altezza (top ~0.72 m). -->
+    <link name="l">
+      <visual name="v">
+        <pose>0.4 0.75 0.46 1.5708 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>model://bar_table/meshes/bar_table.obj</uri>
+            <scale>0.029545 0.0144 0.029545</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <!-- Collisione cilindrica (tavolo tondo): la lattina servita si appoggia sul
+           top (z~0.72) invece di cadere. -->
+      <collision name="c">
+        <pose>0.4 0.75 0.36 0 0 0</pose>
+        <geometry>
+          <cylinder><radius>0.65</radius><length>0.72</length></cylinder>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

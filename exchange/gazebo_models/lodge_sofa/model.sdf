@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="lodge_sofa">
+    <static>true</static>
+    <!-- Bbox VERO delle poltrone (solo vertici usati): 22.6 x 8.8(alt) x 9.8, centro
+         (25.6,4.4,51.4). Scala 0.097 -> due poltrone 2.18(l) x 0.95(p) x 0.85(h) m.
+         roll +90 (Y-up->Z-up) e traslo per centrare in orizzontale con base a z=0.
+         Orientamento finale (yaw) nell'include. -->
+    <link name="l">
+      <visual name="v">
+        <pose>-2.483 4.986 0 1.5708 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>model://lodge_sofa/meshes/lodge_sofa.obj</uri>
+            <scale>0.097 0.097 0.097</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="c">
+        <pose>0 0 0.42 0 0 0</pose>
+        <geometry><box><size>2.18 0.95 0.85</size></box></geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

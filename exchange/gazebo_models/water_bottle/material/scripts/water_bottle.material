@@ -1,0 +1,13 @@
+material Custom/water_bottle
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture water_bottle.jpg
+			}
+		}
+	}
+}

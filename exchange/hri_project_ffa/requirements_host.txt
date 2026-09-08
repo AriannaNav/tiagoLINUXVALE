@@ -1,0 +1,7 @@
+openai-whisper
+sounddevice
+scipy
+numpy
+requests
+PyYAML
+opencv-python==4.10.0.84

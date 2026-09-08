@@ -1,0 +1,50 @@
+# bar_bottles — albedo PBR legati come map_Kd (Gazebo Classic usa solo diffuse)
+newmtl polka
+Ka 0.35 0.35 0.35
+Kd 1 1 1
+Ks 0.25 0.25 0.25
+Ke 0 0 0
+d 1
+Ns 12
+illum 2
+map_Kd polka_albedo.jpg
+
+newmtl glass
+Ka 0.35 0.35 0.35
+Kd 1 1 1
+Ks 0.35 0.35 0.35
+Ke 0 0 0
+d 1
+Ns 24
+illum 2
+map_Kd glass_albedo.jpg
+
+newmtl glassbilel
+Ka 0.35 0.35 0.35
+Kd 1 1 1
+Ks 0.35 0.35 0.35
+Ke 0 0 0
+d 1
+Ns 24
+illum 2
+map_Kd glassbilel_albedo.jpg
+
+newmtl etiketks
+Ka 0.35 0.35 0.35
+Kd 1 1 1
+Ks 0.2 0.2 0.2
+Ke 0 0 0
+d 1
+Ns 10
+illum 2
+map_Kd etiketks_albedo.jpg
+
+newmtl kriwki
+Ka 0.35 0.35 0.35
+Kd 1 1 1
+Ks 0.25 0.25 0.25
+Ke 0 0 0
+d 1
+Ns 12
+illum 2
+map_Kd kriwki_albedo.jpg

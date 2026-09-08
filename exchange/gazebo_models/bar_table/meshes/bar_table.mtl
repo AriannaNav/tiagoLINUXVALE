@@ -1,0 +1,11 @@
+# bar_table material — texture legno (barTable_01_D.png) mappata via UV
+newmtl BarTableMat
+Ka 0.30 0.30 0.30
+Kd 1.0 1.0 1.0
+Ks 0.12 0.12 0.12
+Ke 0 0 0
+d 1
+Ni 1
+Ns 8
+illum 2
+map_Kd barTable_01_D.png

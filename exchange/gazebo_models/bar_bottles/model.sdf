@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="bar_bottles">
+    <static>true</static>
+    <!-- Mesh centrata sull'origine (bbox center = (-45,467,16.5) in unita' mesh):
+         cosi' rotazioni/scala nel .world girano attorno al centro. Scala uniforme
+         ~0.001145 -> lato piu' lungo ~1.3 m. Orientamento definitivo (yaw/roll) e
+         posa si impostano nell'include del world. -->
+    <link name="l">
+      <visual name="v">
+        <pose>0.0662 -0.6865 -0.0243 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>model://bar_bottles/meshes/BaeFin.obj</uri>
+            <scale>0.00147 0.00147 0.00147</scale>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+  </model>
+</sdf>
